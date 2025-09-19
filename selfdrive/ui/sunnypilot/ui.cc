@@ -43,6 +43,7 @@ UIStateSP::UIStateSP(QObject *parent) : UIState(parent) {
     ui_update_params_sp(this);
   });
   param_watcher->addParam("DevUIInfo");
+  param_watcher->addParam("StandstillTimer");
 }
 
 // This method overrides completely the update method from the parent class intentionally.
@@ -61,6 +62,7 @@ void ui_update_params_sp(UIStateSP *s) {
   auto params = Params();
   s->scene.dev_ui_info = std::atoi(params.get("DevUIInfo").c_str());
 
+
   // Onroad Screen Brightness
   s->scene.onroadScreenOffBrightness = std::atoi(params.get("OnroadScreenOffBrightness").c_str());
   s->scene.onroadScreenOffControl = params.getBool("OnroadScreenOffControl");
@@ -75,6 +77,8 @@ void UIStateSP::reset_onroad_sleep_timer() {
   } else {
     scene.onroadScreenOffTimer = -1;
   }
+=======
+  s->scene.standstill_timer = params.getBool("StandstillTimer");
 }
 
 DeviceSP::DeviceSP(QObject *parent) : Device(parent) {

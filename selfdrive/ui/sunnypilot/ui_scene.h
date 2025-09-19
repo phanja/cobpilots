@@ -11,4 +11,6 @@ typedef struct UISceneSP : UIScene {
   int dev_ui_info = 0;
   int onroadScreenOffBrightness, onroadScreenOffTimer = 0;
   bool onroadScreenOffControl;
+=======
+  bool standstill_timer = false;
 } UISceneSP;
