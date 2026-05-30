@@ -5,6 +5,8 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 
+import math
+
 from cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.common.constants import CV
@@ -17,8 +19,14 @@ from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.speed_limit_resolve
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 from openpilot.sunnypilot.models.helpers import get_active_bundle
 
+from openpilot.common.realtime import DT_MDL
 from openpilot.sunnypilot.selfdrive.controls.lib.accel_personality.accel_controller import AccelPersonalityController
+from openpilot.sunnypilot.selfdrive.controls.lib.radar_distance.radar_distance import RadarDistanceController
 from opendbc.car.interfaces import ACCEL_MIN
+
+# output a_target jerk-cap; FCW/stop bypass it for full brake authority
+JERK_IN_MAX = 3.5   # m/s^3, brake building
+JERK_OUT_MAX = 6.0  # m/s^3, brake releasing
 
 DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimentalControlState
 LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
@@ -27,9 +35,10 @@ LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
 class LongitudinalPlannerSP:
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP, mpc):
     self.events_sp = EventsSP()
-    self.resolver = SpeedLimitResolver()
     self.dec = DynamicExperimentalController(CP, mpc)
     self.accel_controller = AccelPersonalityController()
+    self.radar_distance = RadarDistanceController()
+    self.sm_sp = messaging.SubMaster(['liveTracks'])
     self.scc = SmartCruiseControl()
     self.resolver = SpeedLimitResolver()
     self.sla = SpeedLimitAssist(CP, CP_SP)
@@ -38,7 +47,26 @@ class LongitudinalPlannerSP:
     self.e2e_alerts_helper = E2EAlertsHelper()
 
     self.output_v_target = 0.
-    self.output_a_target = 0.
+    self._output_a_target = 0.
+    self.fcw = False
+    self.output_should_stop = False
+
+  @property
+  def output_a_target(self) -> float:
+    return self._output_a_target
+
+  @output_a_target.setter
+  def output_a_target(self, value: float) -> None:
+    value = self.dec.apply_stop_shaping(float(value))
+    if not math.isfinite(value):
+      return
+    prev = self._output_a_target
+    if self.fcw or self.output_should_stop:  # full authority, no rate limit
+      self._output_a_target = value
+      return
+    max_down = prev - JERK_IN_MAX * DT_MDL
+    max_up = prev + JERK_OUT_MAX * DT_MDL
+    self._output_a_target = max(max_down, min(max_up, value))
 
   def is_e2e(self, sm: messaging.SubMaster) -> bool:
     experimental_mode = sm['selfdriveState'].experimentalMode
@@ -48,9 +76,20 @@ class LongitudinalPlannerSP:
     return experimental_mode and self.dec.mode() == "blended"
 
   def get_accel_clip(self, v_ego: float) -> list[float] | None:
-    if self.accel_controller.is_enabled():
-      return [ACCEL_MIN, self.accel_controller.get_max_accel(v_ego)]
-    return None
+    if not self.accel_controller.is_enabled():
+      return None
+
+    a_max = self.accel_controller.get_max_accel(v_ego)
+
+    ceiling = None
+    if self.radar_distance.is_enabled():
+      ceiling = self.radar_distance.get_accel_ceiling(v_ego)
+
+    if ceiling is not None:
+      # clamp >=0: radar ceiling caps accel to coast, never forces brake via the clip
+      a_max = min(a_max, max(0.0, ceiling))
+
+    return [ACCEL_MIN, max(ACCEL_MIN, a_max)]
 
   def get_cruise_min_accel(self, v_ego: float) -> float | None:
     if self.accel_controller.is_enabled():
@@ -84,14 +123,19 @@ class LongitudinalPlannerSP:
     }
 
     self.source = min(targets, key=lambda k: targets[k][0])
-    self.output_v_target, self.output_a_target = targets[self.source]
-    return self.output_v_target, self.output_a_target
+    self.output_v_target, a_target = targets[self.source]
+    return self.output_v_target, a_target
+
+  def smooth_radarstate(self, radarstate):
+    return self.radar_distance.smooth_radarstate(radarstate)
 
   def update(self, sm: messaging.SubMaster) -> None:
     self.events_sp.clear()
     self.dec.update(sm)
     self.e2e_alerts_helper.update(sm, self.events_sp)
+    self.sm_sp.update(0)
     self.accel_controller.update(sm)
+    self.radar_distance.update(sm, self.sm_sp)
 
   def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:
     plan_sp_send = messaging.new_message('longitudinalPlanSP')
