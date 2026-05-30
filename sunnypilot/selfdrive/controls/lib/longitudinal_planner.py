@@ -76,20 +76,9 @@ class LongitudinalPlannerSP:
     return experimental_mode and self.dec.mode() == "blended"
 
   def get_accel_clip(self, v_ego: float) -> list[float] | None:
-    if not self.accel_controller.is_enabled():
-      return None
-
-    a_max = self.accel_controller.get_max_accel(v_ego)
-
-    ceiling = None
-    if self.radar_distance.is_enabled():
-      ceiling = self.radar_distance.get_accel_ceiling(v_ego)
-
-    if ceiling is not None:
-      # clamp >=0: radar ceiling caps accel to coast, never forces brake via the clip
-      a_max = min(a_max, max(0.0, ceiling))
-
-    return [ACCEL_MIN, max(ACCEL_MIN, a_max)]
+    if self.accel_controller.is_enabled():
+      return [ACCEL_MIN, self.accel_controller.get_max_accel(v_ego)]
+    return None
 
   def get_cruise_min_accel(self, v_ego: float) -> float | None:
     if self.accel_controller.is_enabled():
