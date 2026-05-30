@@ -181,13 +181,12 @@ class DynamicExperimentalController:
     return self._mode_manager.get_mode()
 
   def apply_stop_shaping(self, a_target: float) -> float:
-    """Front-load a no-radar-lead vision stop. Active only in blended (_active); gated on
-    a model slow-down with no radar lead. Monotonic: never reduces requested braking."""
+    """Front-load a model-predicted slow-down (lead or light) in blended. Monotonic."""
     if not self._active:
       return a_target
 
     a_target = float(a_target)
-    if self._has_lead_filtered or not self._has_slow_down:
+    if not self._has_slow_down:
       return a_target
     if not (WMACConstants.STOP_SHAPE_V_MIN <= self._v_ego <= WMACConstants.STOP_SHAPE_V_MAX) \
         or a_target >= WMACConstants.STOP_SHAPE_A_ENTER:

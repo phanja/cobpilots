@@ -29,8 +29,9 @@ class TestDecStopShaping:
   def test_disabled_passthrough(self):
     assert _dec(enabled=False).apply_stop_shaping(-1.5) == -1.5
 
-  def test_radar_lead_passthrough(self):
-    assert _dec(lead=True).apply_stop_shaping(-1.5) == -1.5
+  def test_acts_even_with_radar_lead(self):
+    # model-accel front-load is no longer gated on no-lead
+    assert _dec(lead=True, accel_min=-2.5).apply_stop_shaping(-1.0) == _STOP_SHAPE_A_FLOOR
 
   def test_no_slow_down_passthrough(self):
     assert _dec(slow_down=False).apply_stop_shaping(-1.5) == -1.5
