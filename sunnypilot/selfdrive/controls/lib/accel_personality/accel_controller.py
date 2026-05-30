@@ -7,8 +7,10 @@ See the LICENSE.md file in the root directory for more details.
 
 from cereal import custom
 import numpy as np
+from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
+from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 
 AccelPersonality = custom.LongitudinalPlanSP.AccelerationPersonality
 ACCEL_PERSONALITY_OPTIONS = [AccelPersonality.eco, AccelPersonality.normal, AccelPersonality.sport]
@@ -16,9 +18,9 @@ ACCEL_PERSONALITY_OPTIONS = [AccelPersonality.eco, AccelPersonality.normal, Acce
 
 A_MAX_BP = [0.0, 4.0, 8.0, 16.0, 40.0]
 A_MAX_V = {
-  AccelPersonality.eco:    [1.80, 1.80, 1.20, 0.40, 0.08],
-  AccelPersonality.normal: [1.80, 1.80, 1.35, 0.50, 0.15],
-  AccelPersonality.sport:  [1.80, 1.80, 1.50, 0.70, 0.25],
+  AccelPersonality.eco:    [1.40, 1.40, 1.30, 0.43, 0.08],
+  AccelPersonality.normal: [1.80, 1.80, 1.45, 0.50, 0.15],
+  AccelPersonality.sport:  [2.20, 2.20, 1.60, 0.70, 0.25],
 }
 
 COAST_DRAG_BP = [0.0, 10.0, 25.0, 40.0]
@@ -28,20 +30,21 @@ COAST_DRAG_V = {
   AccelPersonality.sport:  [-0.06, -0.10, -0.18, -0.28],
 }
 
-A_MIN_FLOOR_BP = [0.0, 5.0, 15.0, 40.0]
+A_MIN_FLOOR_BP =      [2.0,    4.0,    8.0,   16.,   40.0]  # m/s
 A_MIN_FLOOR_V = {
-  AccelPersonality.eco:    [-0.20, -0.35, -0.55, -0.50],
-  AccelPersonality.normal: [-0.25, -0.45, -0.75, -0.65],
-  AccelPersonality.sport:  [-0.35, -0.65, -1.00, -0.95],
+  AccelPersonality.eco:    [-0.002, -0.45, -0.30, -0.03, -0.42],
+  AccelPersonality.normal: [-0.002, -0.47, -0.32, -0.05, -0.60],
+  AccelPersonality.sport:  [-0.002, -0.50, -0.35, -0.07, -0.80],
 }
 
 DEFICIT_TO_FLOOR = 8.5
 COAST_DEADBAND = 1.0
 RAMP_OFF_RANGE = 5.0
 
-A_MIN_TIGHTEN_RATE = 0.9
-A_MIN_RELAX_RATE = 0.6
-A_MAX_RATE = 0.6
+A_MIN_TIGHTEN_RATE = 0.6
+A_MIN_RELAX_RATE = 0.9
+A_MAX_RATE_UP = 1.2
+A_MAX_RATE_DOWN = 0.6
 
 MIN_MAX_GAP = 0.05
 
@@ -74,7 +77,9 @@ class AccelPersonalityController:
 
     if sm is not None:
       try:
-        self._v_cruise = float(sm['carState'].vCruise) * (1000.0 / 3600.0)
+        # >= V_CRUISE_MAX means cruise unset (255) -> no setpoint
+        vc_kph = float(sm['carState'].vCruise)
+        self._v_cruise = 0.0 if vc_kph >= V_CRUISE_MAX else vc_kph * CV.KPH_TO_MS
       except Exception:
         pass
 
@@ -155,6 +160,7 @@ class AccelPersonalityController:
     if self._v_cruise <= 0.0 or v_ego >= self._v_cruise:
       return coast
     floor = float(np.interp(v_ego, A_MIN_FLOOR_BP, A_MIN_FLOOR_V[self._personality]))
+    floor = min(floor, coast)  # never allow less decel than coasting drag
     deficit = self._v_cruise - v_ego
     t = float(np.clip(deficit / DEFICIT_TO_FLOOR, 0.0, 1.0)) ** 1.5
     return coast + t * (floor - coast)
@@ -181,7 +187,7 @@ class AccelPersonalityController:
       return self._a_min, self._a_max
 
     new_min = self._rate_limit(self._a_min, t_min, rate_down=A_MIN_TIGHTEN_RATE, rate_up=A_MIN_RELAX_RATE)
-    new_max = self._rate_limit(self._a_max, t_max, rate_down=A_MAX_RATE, rate_up=A_MAX_RATE)
+    new_max = self._rate_limit(self._a_max, t_max, rate_down=A_MAX_RATE_DOWN, rate_up=A_MAX_RATE_UP)
 
     new_min = min(new_min, new_max - MIN_MAX_GAP)
 
