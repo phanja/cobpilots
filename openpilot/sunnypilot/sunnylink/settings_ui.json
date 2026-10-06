@@ -519,6 +519,42 @@
           ]
         },
         {
+          "id": "lane_assist",
+          "title": "Lane Centering and Curve Tracking",
+          "description": "Experimental torque-steering corrections based on commanded path and lane lines",
+          "enablement": [
+            {
+              "type": "capability",
+              "field": "torque_allowed",
+              "equals": true
+            }
+          ],
+          "items": [
+            {
+              "key": "LateralCurveCuttingCorrection",
+              "widget": "toggle",
+              "title": "Curve-Cutting Correction (Experimental)",
+              "description": "Reduces commanded curvature slightly at higher speeds to counter inside-cutting. This affects steering and needs careful driver-supervised testing; off by default.",
+              "enablement": [
+                {
+                  "type": "offroad_only"
+                }
+              ]
+            },
+            {
+              "key": "LateralLaneCentering",
+              "widget": "toggle",
+              "title": "Lane-Line Centering (Experimental)",
+              "description": "Adds a small, capped steering correction from reliable lane-line geometry above highway speed. Lane-line perception can be wrong; remain attentive and be ready to steer. Off by default.",
+              "enablement": [
+                {
+                  "type": "offroad_only"
+                }
+              ]
+            }
+          ]
+        },
+        {
           "id": "lane_change",
           "title": "Lane Change",
           "description": "Automatic lane change timing and behavior",
@@ -774,6 +810,53 @@
                 {
                   "value": 2,
                   "label": "Relaxed"
+                }
+              ],
+              "enablement": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "AccelPersonalityEnabled",
+              "widget": "toggle",
+              "title": "Enable Accel Controller",
+              "description": "Lets you choose how sunnypilot starts, catches up, and settles at the cruise speed. Emergency braking and stopping are unchanged.",
+              "visibility": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ],
+              "enablement": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "AccelPersonality",
+              "widget": "multiple_button",
+              "title": "Acceleration Profile",
+              "description": "Eco is gentlest, Normal balances a prompt start with smooth catch-up, and Sport is more responsive.",
+              "options": [
+                {
+                  "value": 0,
+                  "label": "Eco"
+                },
+                {
+                  "value": 1,
+                  "label": "Normal"
+                },
+                {
+                  "value": 2,
+                  "label": "Sport"
                 }
               ],
               "enablement": [
@@ -2420,6 +2503,50 @@
       "title": "Toyota / Lexus Settings",
       "description": "",
       "items": [
+        {
+          "key": "ToyotaAutoHold",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Toyota: Auto Brake Hold FOR TSS2 HYBRID CARS",
+          "enablement": [
+            {
+              "type": "not_engaged"
+            }
+          ]
+        },
+        {
+          "key": "ToyotaEnhancedBsm",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Toyota: Prius TSS2 BSM and some tssp",
+          "enablement": [
+            {
+              "type": "not_engaged"
+            }
+          ]
+        },
+        {
+          "key": "ToyotaTSS2Long",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Toyota: custom longitudinal for TSS2",
+          "enablement": [
+            {
+              "type": "not_engaged"
+            }
+          ]
+        },
+        {
+          "key": "ToyotaDriveMode",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Enable drive mode btn link",
+          "enablement": [
+            {
+              "type": "not_engaged"
+            }
+          ]
+        },
         {
           "key": "ToyotaEnforceStockLongitudinal",
           "widget": "toggle",

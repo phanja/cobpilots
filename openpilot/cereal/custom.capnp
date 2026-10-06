@@ -213,11 +213,16 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
   events @6 :List(OnroadEventSP.Event);
   e2eAlerts @7 :E2eAlerts;
   zoompilot @8 :LongitudinalPlanZP;
+  accelController @9 :AccelController;
 
   struct DynamicExperimentalControl {
     state @0 :DynamicExperimentalControlState;
     enabled @1 :Bool;
     active @2 :Bool;
+    decelIntent @3 :Float32;
+    curveDetected @4 :Bool;
+    wantBlended @5 :Bool;
+    leadVeto @6 :Bool;
 
     enum DynamicExperimentalControlState {
       acc @0;
@@ -317,6 +322,17 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
   struct E2eAlerts {
     greenLightAlert @0 :Bool;
     leadDepartAlert @1 :Bool;
+  }
+
+  struct AccelController {
+    enabled @0 :Bool;
+    active @1 :Bool;
+    profile @2 :Profile;
+    enum Profile {
+      eco @0;
+      normal @1;
+      sport @2;
+    }
   }
 }
 
@@ -479,6 +495,8 @@ struct BackupManagerSP @0xf98d843bfd7004a3 {
 struct CarStateSP @0xb86e6369214c01c8 {
   speedLimit @0 :Float32;
   zoompilot @1 :CarStateZP;
+  engineOff @2 :Bool;
+  engineRpm @3 :Float32;
 }
 
 struct LiveMapDataSP @0xf416ec09499d9d19 {

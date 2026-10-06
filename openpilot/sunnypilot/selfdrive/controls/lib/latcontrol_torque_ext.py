@@ -10,6 +10,7 @@ import numpy as np
 from opendbc.sunnypilot.car.interfaces import get_steer_rail_schedule
 from openpilot.sunnypilot.selfdrive.controls.lib.nnlc.nnlc import NeuralNetworkLateralControl
 from openpilot.sunnypilot.selfdrive.controls.lib.latcontrol_torque_ext_override import LatControlTorqueExtOverride
+from openpilot.sunnypilot.selfdrive.controls.lib.lateral_lane_assist import LateralLaneAssist
 
 
 class LatControlTorqueExt(NeuralNetworkLateralControl, LatControlTorqueExtOverride):
@@ -27,6 +28,10 @@ class LatControlTorqueExt(NeuralNetworkLateralControl, LatControlTorqueExtOverri
     # what the carcontroller reported back, pushed by controlsd_ext after its classifier
     self._applied_torque = 0.0
     self._at_rail = False
+    self.lateral_lane_assist = LateralLaneAssist(lac_torque.dt)
+
+  def adjust_desired_curvature(self, desired_curvature, CS, active):
+    return self.lateral_lane_assist.update(desired_curvature, CS.vEgo, active, CS.steeringPressed, self.model_v2)
 
   def rail_scale_at(self, v_ego: float) -> float:
     if self.steer_rail_schedule is None:

@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 
-from openpilot.cereal import messaging, custom
+from openpilot.cereal import messaging, custom, log
 from opendbc.car import structs
 from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
@@ -17,6 +17,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan
 from openpilot.selfdrive.modeld.constants import ModelConstants
+from openpilot.sunnypilot.selfdrive.controls.lib.accel_controller.accel_controller import AccelController
 from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimentalController
 from openpilot.sunnypilot.selfdrive.controls.lib.e2e_lead_gap.controller import E2ELeadGapController
 from openpilot.sunnypilot.selfdrive.controls.lib.e2e_set_speed.controller import E2ESetSpeedController
@@ -33,6 +34,9 @@ from openpilot.sunnypilot.models.helpers import get_active_bundle
 DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimentalControlState
 LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
+MpcPlanSource = log.LongitudinalPlan.LongitudinalPlanSource
+
+E2E_BRAKE_HOLD_ACCEL = -0.2  # m/s^2
 
 
 class LongitudinalPlannerSP:
@@ -45,6 +49,8 @@ class LongitudinalPlannerSP:
   a_desired_trajectory: np.ndarray
 
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP, mpc):
+    self.accel_controller = AccelController()
+    self.accel_controller_active = False
     self.events_sp = EventsSP()
     self.dec = DynamicExperimentalController(CP, mpc)
     self.e2e_set_speed = E2ESetSpeedController()
@@ -73,10 +79,48 @@ class LongitudinalPlannerSP:
 
   def is_e2e(self, sm: messaging.SubMaster) -> bool:
     experimental_mode = sm['selfdriveState'].experimentalMode
-    if not self.dec.active():
-      return experimental_mode
+    if not experimental_mode:
+      return False
 
-    return experimental_mode and self.dec.mode() == "blended"
+    if not self.dec.active() or self.dec.mode() == "blended":
+      return True
+
+    if self.mpc.source == MpcPlanSource.e2e and sm['modelV2'].action.desiredAcceleration < E2E_BRAKE_HOLD_ACCEL:
+      return True
+
+    return False
+
+  def get_max_accel_override(self, v_ego: float, engine_off: bool = False) -> float | None:
+    if not self.accel_controller.is_enabled():
+      return None
+
+    return self.accel_controller.get_max_accel(v_ego, engine_off)
+
+  def get_cruise_target_override(self, v_ego: float, v_target: float, force_decel: bool, accel_coast: float | None = None) -> float:
+    if not self.accel_controller.is_enabled() or force_decel or self.source != LongitudinalPlanSource.cruise:
+      return v_target
+
+    return self.accel_controller.get_cruise_target(v_ego, v_target, accel_coast)
+
+  def is_accel_controller_active(self, force_decel: bool) -> bool:
+    return bool(self.accel_controller.is_enabled() and not force_decel and
+                self.mpc.source == MpcPlanSource.cruise)
+
+  def _has_valid_selected_lead(self, sm: messaging.SubMaster, source: MpcPlanSource) -> bool:
+    radar_valid = sm.valid.get('radarState', False) and getattr(sm, 'alive', {}).get('radarState', False)
+    return radar_valid and ((source == MpcPlanSource.lead0 and sm['radarState'].leadOne.present) or
+                            (source == MpcPlanSource.lead1 and sm['radarState'].leadTwo.present))
+
+  def arbitrate_cruise_candidate(self, sm: messaging.SubMaster, gated: float, ungated: float,
+                                 mpc_accel: float, mpc_source: MpcPlanSource, *, allow_throttle: bool,
+                                 e2e: bool, force_decel: bool) -> float:
+    finite = all(math.isfinite(value) for value in (gated, ungated, mpc_accel))
+    coast_gate_changed_source = gated < mpc_accel <= ungated
+    if (finite and not allow_throttle and not e2e and not force_decel
+        and self._has_valid_selected_lead(sm, mpc_source) and coast_gate_changed_source):
+      return ungated
+
+    return gated
 
   def update_targets(self, sm: messaging.SubMaster, v_ego: float, a_ego: float, v_cruise: float) -> tuple[float, float]:
     CS = sm['carState']
@@ -144,10 +188,14 @@ class LongitudinalPlannerSP:
                                     self.a_cruise, steer_lat_accel)
 
   def update(self, sm: messaging.SubMaster) -> None:
+    self.accel_controller.update()
     self.events_sp.clear()
     self.dec.update(sm)
     self.lead_forecast.update(sm)
     self.e2e_alerts_helper.update(sm, self.events_sp)
+
+  def update_dec(self, sm: messaging.SubMaster) -> None:
+    self.dec.update(sm)
 
   def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:
     plan_sp_send = messaging.new_message('longitudinalPlanSP')
@@ -165,6 +213,15 @@ class LongitudinalPlannerSP:
     dec.state = DecState.blended if self.dec.mode() == 'blended' else DecState.acc
     dec.enabled = self.dec.enabled()
     dec.active = self.dec.active()
+    dec.decelIntent = float(self.dec.signals.decel_intent)
+    dec.curveDetected = bool(self.dec.signals.curve_detected)
+    dec.wantBlended = bool(self.dec.want_blended)
+    dec.leadVeto = bool(self.dec.lead_veto)
+
+    accel_controller = longitudinalPlanSP.accelController
+    accel_controller.enabled = bool(self.accel_controller.is_enabled())
+    accel_controller.active = bool(self.accel_controller_active)
+    accel_controller.profile = int(self.accel_controller.profile)
 
     # Smart Cruise Control
     smartCruiseControl = longitudinalPlanSP.smartCruiseControl

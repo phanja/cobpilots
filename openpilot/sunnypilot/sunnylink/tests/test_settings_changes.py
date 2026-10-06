@@ -9,6 +9,7 @@ isolates one of the gating bugs that the design-overhaul branch fixes so a
 future regression is loud and obvious. These tests are intentionally narrow
 and additive — they do not replace the broader test_settings_schema.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,14 +26,13 @@ from openpilot.sunnypilot.sunnylink.tools.generate_settings_schema import (
   _load_torque_versions,
   generate_schema,
 )
+from openpilot.sunnypilot.sunnylink.tools.validate_settings_ui import validate as validate_settings_ui
 from openpilot.common.test import OpenpilotTestCase
-
-
-SCHEMA_VALIDATOR_PATH = os.path.join(os.path.dirname(DEFINITION_PATH), "settings_ui.schema.json")
 
 
 def _walk_items(schema: dict[str, Any]):
   """Yield every item dict from the schema."""
+
   def _yield(item: dict[str, Any]):
     yield item
     for sub in item.get("sub_items", []):
@@ -150,22 +150,13 @@ class TestTestManeuversSection(OpenpilotTestCase):
     assert "is_sp_release" in vis_refs
     enablement = section.get("enablement") or []
     enable_refs = json.dumps(enablement)
-    assert "ShowAdvancedControls" in enable_refs, \
-      "test_maneuvers must gate ShowAdvancedControls via enablement"
+    assert "ShowAdvancedControls" in enable_refs, "test_maneuvers must gate ShowAdvancedControls via enablement"
 
 
 class TestValidator(OpenpilotTestCase):
   def test_validator_accepts_real_json(self):
-    """settings_ui.json validates against settings_ui.schema.json."""
-    try:
-      import jsonschema
-    except ImportError:
-      self.skipTest("jsonschema not installed")
-    with open(DEFINITION_PATH) as f:
-      data = json.load(f)
-    with open(SCHEMA_VALIDATOR_PATH) as f:
-      validator = json.load(f)
-    jsonschema.validate(instance=data, schema=validator)
+    """settings_ui.json passes the repository's production schema validator."""
+    self.assertTrue(validate_settings_ui(DEFINITION_PATH))
 
 
 class TestTorqueOptionGeneration(OpenpilotTestCase):
@@ -179,9 +170,7 @@ class TestTorqueOptionGeneration(OpenpilotTestCase):
       assert item.get("options") == expected
 
   def test_torque_versions_path_resolves(self):
-    assert os.path.exists(TORQUE_VERSIONS_PATH), (
-      f"latcontrol_torque_versions.json not found at {TORQUE_VERSIONS_PATH}"
-    )
+    assert os.path.exists(TORQUE_VERSIONS_PATH), f"latcontrol_torque_versions.json not found at {TORQUE_VERSIONS_PATH}"
 
   def test_no_static_torque_options_in_definition(self):
     """The injector overwrites the tune keys' options for every consumer, so a static
@@ -195,10 +184,13 @@ class TestTorqueOptionGeneration(OpenpilotTestCase):
 
 
 class TestReleaseBranchGates(OpenpilotTestCase):
-  @parameterized.expand([
-    "EnableGithubRunner",
-    "QuickBootToggle",
-  ], names=["key"])
+  @parameterized.expand(
+    [
+      "EnableGithubRunner",
+      "QuickBootToggle",
+    ],
+    names=["key"],
+  )
   def test_sp_dev_items_gate_on_is_sp_release(self, schema, key):
     """sunnypilot dev items must hide on sunnypilot release branches (is_sp_release gate)."""
     item = _find_item(schema, key)
@@ -220,11 +212,14 @@ class TestSpuriousOffroadGatesDropped(OpenpilotTestCase):
 
 
 class TestNotEngagedReplacement(OpenpilotTestCase):
-  @parameterized.expand([
-    "AlphaLongitudinalEnabled",
-    "ToyotaEnforceStockLongitudinal",
-    "ToyotaStopAndGoHack",
-  ], names=["key"])
+  @parameterized.expand(
+    [
+      "AlphaLongitudinalEnabled",
+      "ToyotaEnforceStockLongitudinal",
+      "ToyotaStopAndGoHack",
+    ],
+    names=["key"],
+  )
   def test_offroad_only_replaced_with_not_engaged(self, schema, key):
     """These items should use not_engaged, not offroad_only."""
     item = _find_item(schema, key)
@@ -232,3 +227,5 @@ class TestNotEngagedReplacement(OpenpilotTestCase):
     rule_types = _flatten_rule_types(item.get("enablement"))
     assert "offroad_only" not in rule_types, f"{key} still uses offroad_only"
     assert "not_engaged" in rule_types, f"{key} missing not_engaged"
+
+

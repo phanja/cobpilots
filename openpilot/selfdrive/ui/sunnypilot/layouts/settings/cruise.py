@@ -147,7 +147,9 @@ class CruiseLayout(Widget):
       self.sla_settings_button.set_right_value(tr("icbm") if icbm_sla else "", style.GREEN)
 
       if has_long or has_icbm:
-        self.custom_acc_toggle.action_item.set_enabled(((has_long and not ui_state.CP.pcmCruise) or has_icbm) and ui_state.is_offroad())
+        software_cruise_speed = has_long and (not ui_state.CP.pcmCruise or not ui_state.CP_SP.pcmCruiseSpeed)
+        self.custom_acc_toggle.action_item.set_enabled((software_cruise_speed or has_icbm) and ui_state.is_offroad())
+        self.dec_toggle.action_item.set_enabled(has_long)
         self.scc_v_toggle.action_item.set_enabled(True)
         self.scc_m_toggle.action_item.set_enabled(True)
       else:
@@ -167,7 +169,7 @@ class CruiseLayout(Widget):
       show_custom_acc_desc = True
     else:
       if has_long or has_icbm:
-        if has_long and ui_state.CP.pcmCruise and not has_icbm:
+        if has_long and ui_state.CP.pcmCruise and ui_state.CP_SP.pcmCruiseSpeed and not has_icbm:
           new_custom_acc_desc = tr(ACC_PCMCRUISE_DISABLED_DESCRIPTION)
           show_custom_acc_desc = True
         else:
