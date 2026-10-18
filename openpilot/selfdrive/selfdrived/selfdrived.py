@@ -531,9 +531,11 @@ class SelfdriveD(CruiseHelper):
           self.events.add(EventName.personalityChanged)
         self.experimental_mode_switched = False
 
-      if self.personality != getattr(self, "_prev_personality_event", self.personality):
-        self._prev_personality_event = self.personality
-        self.events.add(EventName.personalityChanged)
+    # Fire personalityChanged for all cars (including SecOC/radar-ACC cars like RAV4 Prime)
+    # when the param is updated externally (e.g. from card_ext dashboard sync)
+    if self.personality != getattr(self, "_prev_personality_event", self.personality):
+      self._prev_personality_event = self.personality
+      self.events.add(EventName.personalityChanged)
 
     self.icbm.run(CS, self.sm['carControl'], self.sm['longitudinalPlanSP'], self.is_metric)
 
