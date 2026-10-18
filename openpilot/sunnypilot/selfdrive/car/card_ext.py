@@ -47,11 +47,11 @@ class CardExt:
     CS_SP.zoompilot.lkasArming = bool(getattr(self.car_state, "lkas_arming", False))
 
     # Sync Toyota dashboard follow distance to openpilot personality:
-    # 1: Far (3 bars) -> 0: Relaxed, 2: Med (2 bars) -> 1: Standard, 3: Close (1 bar) -> 2: Aggressive
+    # 1: Far (3 bars) -> 2: Relaxed, 2: Med (2 bars) -> 1: Standard, 3: Close (1 bar) -> 0: Aggressive
     pcm_dist = getattr(self.car_state, "pcm_follow_distance", 0)
     if pcm_dist in (1, 2, 3) and pcm_dist != self._last_pcm_dist:
       self._last_pcm_dist = pcm_dist
-      self.params.put('LongitudinalPersonality', int(pcm_dist) - 1)
+      self.params.put('LongitudinalPersonality', 3 - int(pcm_dist))
 
   @property
   def stock_ecu_state(self) -> StockEcuState:

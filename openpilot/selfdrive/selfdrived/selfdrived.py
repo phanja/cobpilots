@@ -149,6 +149,7 @@ class SelfdriveD(CruiseHelper):
       max(log.LongitudinalPersonality.schema.enumerants.values()),
       self.params
     )
+    self._prev_personality_event = self.personality
     self.recalibrating_seen = False
     self.dm_lockout_set = False
     self.dm_uncertain_alerted = False
@@ -531,7 +532,7 @@ class SelfdriveD(CruiseHelper):
           self.events.add(EventName.personalityChanged)
         self.experimental_mode_switched = False
 
-      if self.personality != getattr(self, "_prev_personality_event", self.personality):
+      if self.personality != self._prev_personality_event:
         self._prev_personality_event = self.personality
         self.events.add(EventName.personalityChanged)
 
