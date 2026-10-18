@@ -51,7 +51,7 @@ class CardExt:
     pcm_dist = getattr(self.car_state, "pcm_follow_distance", 0)
     if pcm_dist in (1, 2, 3) and pcm_dist != self._last_pcm_dist:
       self._last_pcm_dist = pcm_dist
-      self.params.put('LongitudinalPersonality', pcm_dist - 1)
+      self.params.put('LongitudinalPersonality', int(pcm_dist) - 1)
 
   @property
   def stock_ecu_state(self) -> StockEcuState:
