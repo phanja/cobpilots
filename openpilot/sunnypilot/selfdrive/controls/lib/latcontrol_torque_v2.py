@@ -54,6 +54,8 @@ def get_center_chatter_jerk_deadzone(v_ego, setpoint):
 class LatControlTorque(LatControlTorqueV0):
   def __init__(self, CP, CP_SP, CI, dt):
     super().__init__(CP, CP_SP, CI, dt)
+    self.CP = CP
+    self.is_rav4_prime = (getattr(CP, 'carFingerprint', '') == 'TOYOTA_RAV4_PRIME')
     # v0 already supplies negative measurement rate to the shared PID; the extension holds the
     # same PID object, so the schedule reaches it too
     self.pid._k_d = [KD_INTERP_SPEEDS, KD_INTERP]
@@ -68,7 +70,7 @@ class LatControlTorque(LatControlTorqueV0):
     self.update_limits()  # restore lateral-acceleration PID limits
 
   def update(self, active, CS, VM, params, steer_limited_by_safety, desired_curvature, calibrated_pose, curvature_limited, lat_delay):
-    if getattr(self.CP, 'carFingerprint', '') == 'TOYOTA_RAV4_PRIME':
+    if self.is_rav4_prime:
       # Speed-dependent steering delay for Toyota RAV4 Prime:
       # Measured lag peaks at 15-30 mph (~0.50s) and settles to ~0.43s on highway.
       # Speeds in m/s: [6.7, 11.2, 15.6, 24.6] (~15, 25, 35, 55 mph)
