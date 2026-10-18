@@ -68,6 +68,15 @@ class LatControlTorque(LatControlTorqueV0):
     self.update_limits()  # restore lateral-acceleration PID limits
 
   def update(self, active, CS, VM, params, steer_limited_by_safety, desired_curvature, calibrated_pose, curvature_limited, lat_delay):
+    if getattr(self.CP, 'carFingerprint', '') == 'TOYOTA_RAV4_PRIME':
+      # Speed-dependent steering delay for Toyota RAV4 Prime:
+      # Measured lag peaks at 15-30 mph (~0.50s) and settles to ~0.43s on highway.
+      # Speeds in m/s: [6.7, 11.2, 15.6, 24.6] (~15, 25, 35, 55 mph)
+      # Delays in sec: [0.428, 0.502, 0.437, 0.437]
+      DELAY_SPEED_BP = [6.7, 11.2, 15.6, 24.6]
+      DELAY_VALS = [0.428, 0.502, 0.437, 0.437]
+      lat_delay = float(np.interp(CS.vEgo, DELAY_SPEED_BP, DELAY_VALS))
+
     # Apply live torque parameters before updating the controller limits.
     if self.extension.update_override_torque_params(self.torque_params):
       self.update_limits()
