@@ -27,6 +27,8 @@ class CardExt:
     self.controller = CI.CC
     self.car_state = CI.CS
     self.handback = StockEcuHandBackServer(params)
+    self.params = params
+    self._last_pcm_dist = None
 
   def update_v_cruise_post(self, CS, CS_SP) -> None:
     helper = self.v_cruise_helper
@@ -43,6 +45,13 @@ class CardExt:
     CS_SP.zoompilot.distanceFarther = bool(getattr(self.car_state, "distance_more_button", 0))
     # the EPS re-arming after the car's lane keep came back on, on the brands that track it
     CS_SP.zoompilot.lkasArming = bool(getattr(self.car_state, "lkas_arming", False))
+
+    # Sync Toyota dashboard follow distance to openpilot personality:
+    # 1: Far (3 bars) -> 0: Relaxed, 2: Med (2 bars) -> 1: Standard, 3: Close (1 bar) -> 2: Aggressive
+    pcm_dist = getattr(self.car_state, "pcm_follow_distance", 0)
+    if pcm_dist in (1, 2, 3) and pcm_dist != self._last_pcm_dist:
+      self._last_pcm_dist = pcm_dist
+      self.params.put('LongitudinalPersonality', pcm_dist - 1)
 
   @property
   def stock_ecu_state(self) -> StockEcuState:

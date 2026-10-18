@@ -531,6 +531,10 @@ class SelfdriveD(CruiseHelper):
           self.events.add(EventName.personalityChanged)
         self.experimental_mode_switched = False
 
+      if self.personality != getattr(self, "_prev_personality_event", self.personality):
+        self._prev_personality_event = self.personality
+        self.events.add(EventName.personalityChanged)
+
     self.icbm.run(CS, self.sm['carControl'], self.sm['longitudinalPlanSP'], self.is_metric)
 
   def data_sample(self):
