@@ -76,7 +76,7 @@ class LatControlTorque(LatControlTorqueV0):
       # Speeds in m/s: [6.7, 11.2, 15.6, 24.6] (~15, 25, 35, 55 mph)
       # Delays in sec: [0.428, 0.502, 0.437, 0.437]
       DELAY_SPEED_BP = [6.7, 11.2, 15.6, 24.6]
-      DELAY_VALS = [0.428, 0.502, 0.437, 0.437]
+      DELAY_VALS = [0.342, 0.365, 0.342, 0.321]
       lat_delay = float(np.interp(CS.vEgo, DELAY_SPEED_BP, DELAY_VALS))
 
     # Apply live torque parameters before updating the controller limits.
