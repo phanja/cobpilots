@@ -55,3 +55,11 @@ requires_steer_to_zero = true
 [MAZDA_6]
 substitute = "MAZDA_CX5_2022"
 requires_steer_to_zero = true
+
+[TOYOTA_RAV4_PRIME]
+# 9-bin schedule fit from empirical drive logs; eliminates 20-35 mph torque saturation
+speed_bp    = [3.5, 7.0, 10.0, 13.5, 17.0, 22.0, 28.0, 34.0, 37.5]
+laf_bp      = [2.20, 2.10, 2.00, 2.02, 1.95, 1.88, 1.82, 1.83, 1.88]
+friction_bp = [0.180, 0.170, 0.145, 0.135, 0.128, 0.125, 0.116, 0.115, 0.118]
+min_speed = 2.0
+seed_version = 1
