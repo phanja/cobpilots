@@ -29,14 +29,16 @@ class CruiseHelper:
     self._experimental_mode = False
     self.experimental_mode_switched = False
     self.distance_farther_prev = False
+    self.big_model_switched = False
 
   def update(self, CS, events, experimental_mode) -> None:
+    self.update_button_frame_counts(CS)
+
     if self.CP.openpilotLongitudinalControl:
       if CS.cruiseState.available:
-        self.update_button_frame_counts(CS)
-
-        # toggle experimental mode once on distance button hold
-        self.update_experimental_mode(events, experimental_mode)
+        # toggle experimental mode once on distance button hold if not using Jetlink
+        if self.params.get("JetlinkLink") in (None, b"", b"0", b"off"):
+          self.update_experimental_mode(events, experimental_mode)
 
     if self.sm is not None:
       self.update_selfdrived(CS, self.sm['carStateSP'])

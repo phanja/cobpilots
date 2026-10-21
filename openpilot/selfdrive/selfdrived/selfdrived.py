@@ -33,6 +33,7 @@ from openpilot.sunnypilot.selfdrive.car.cruise_helpers import CruiseHelper
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.controller import IntelligentCruiseButtonManagement
 from openpilot.sunnypilot.selfdrive.selfdrived.button_state_tracker import ButtonStateTracker
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
+from openpilot.sunnypilot.selfdrive.selfdrived.events_base import Alert, Priority as AlertPriority
 from openpilot.sunnypilot.selfdrive.selfdrived.model_events import ModelEventsSP
 
 REPLAY = "REPLAY" in os.environ
@@ -187,6 +188,7 @@ class SelfdriveD(CruiseHelper):
 
     CruiseHelper.__init__(self, self.CP)
     self.button_state_tracker = ButtonStateTracker()
+    self.big_model_alert = None
 
   def update_events(self, CS):
     """Compute onroadEvents from carState"""
@@ -523,18 +525,37 @@ class SelfdriveD(CruiseHelper):
 
     CruiseHelper.update(self, CS, self.events_sp, self.experimental_mode)
 
+    # Long press of distance button toggles Big Model active/paused
+    if self.button_frame_counts[ButtonType.gapAdjustCruise] >= DISTANCE_LONG_PRESS and not self.big_model_switched:
+      paused = not self.params.get_bool("JetlinkPaused")
+      self.params.put_bool("JetlinkPaused", paused)
+      if paused:
+        alert = Alert("Big Model Paused", "Using small model",
+                      log.SelfdriveState.AlertStatus.normal, log.SelfdriveState.AlertSize.small,
+                      AlertPriority.LOW, car.CarControl.HUDControl.VisualAlert.none,
+                      car.CarControl.HUDControl.AudibleAlert.prompt, 2.0)
+      else:
+        alert = Alert("Big Model Resumed", "Ready to engage",
+                      log.SelfdriveState.AlertStatus.normal, log.SelfdriveState.AlertSize.small,
+                      AlertPriority.LOW, car.CarControl.HUDControl.VisualAlert.none,
+                      car.CarControl.HUDControl.AudibleAlert.prompt, 2.0)
+      alert.alert_type = "bigModelStatus"
+      self.big_model_alert = alert
+      self.big_model_switched = True
+
     # decrement personality on distance button press
-    if self.CP.openpilotLongitudinalControl:
-      if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
-        if not self.experimental_mode_switched:
+    if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
+      if not self.big_model_switched and not self.experimental_mode_switched:
+        if self.CP.openpilotLongitudinalControl:
           self.personality = (self.personality - 1) % 3
           self.params.put('LongitudinalPersonality', self.personality)
           self.events.add(EventName.personalityChanged)
-        self.experimental_mode_switched = False
+      self.big_model_switched = False
+      self.experimental_mode_switched = False
 
-      if self.personality != self._prev_personality_event:
-        self._prev_personality_event = self.personality
-        self.events.add(EventName.personalityChanged)
+    if self.CP.openpilotLongitudinalControl and self.personality != self._prev_personality_event:
+      self._prev_personality_event = self.personality
+      self.events.add(EventName.personalityChanged)
 
     self.icbm.run(CS, self.sm['carControl'], self.sm['longitudinalPlanSP'], self.is_metric)
 
@@ -599,7 +620,12 @@ class SelfdriveD(CruiseHelper):
     alerts = self.events.create_alerts(self.state_machine.current_alert_types, callback_args)
     alerts_sp = self.events_sp.create_alerts(self.state_machine.current_alert_types, callback_args)
 
-    self.AM.add_many(self.sm.frame, alerts + alerts_sp)
+    extra_alerts = []
+    if getattr(self, "big_model_alert", None) is not None:
+      extra_alerts.append(self.big_model_alert)
+      self.big_model_alert = None
+
+    self.AM.add_many(self.sm.frame, alerts + alerts_sp + extra_alerts)
     self.AM.process_alerts(self.sm.frame, clear_event_types)
 
   def publish_selfdriveState(self, CS):
