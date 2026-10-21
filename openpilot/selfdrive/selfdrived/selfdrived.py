@@ -153,6 +153,7 @@ class SelfdriveD(CruiseHelper):
     )
     self._prev_personality_event = self.personality
     self._prev_jetlink_paused = is_jetlink_paused()
+    self._last_cancel_press_t = 0.0
     self.recalibrating_seen = False
     self.dm_lockout_set = False
     self.dm_uncertain_alerted = False
@@ -527,16 +528,17 @@ class SelfdriveD(CruiseHelper):
 
     CruiseHelper.update(self, CS, self.events_sp, self.experimental_mode)
 
-    # Long press of LKA button toggles Big Model active/paused
-    if self.button_frame_counts.get(ButtonType.lkas, 0) >= DISTANCE_LONG_PRESS and not self.big_model_switched:
-      set_jetlink_paused(not is_jetlink_paused())
-      self.big_model_switched = True
+    # Double press of CANCEL button toggles Big Model active/paused
+    for be in CS.buttonEvents:
+      if be.type == ButtonType.cancel and be.pressed:
+        now = time.monotonic()
+        if 0.05 < (now - self._last_cancel_press_t) < 0.6:
+          set_jetlink_paused(not is_jetlink_paused())
+          self._last_cancel_press_t = 0.0
+        else:
+          self._last_cancel_press_t = now
 
-    # Reset big model switch latch when LKA button is released
-    if any(not be.pressed and be.type == ButtonType.lkas for be in CS.buttonEvents):
-      self.big_model_switched = False
-
-    # Check for JetlinkPaused update (e.g. from Toyota LKA hold via card_ext or button frame counts)
+    # Check for JetlinkPaused update
     jetlink_paused = is_jetlink_paused()
     if jetlink_paused != self._prev_jetlink_paused:
       self._prev_jetlink_paused = jetlink_paused
