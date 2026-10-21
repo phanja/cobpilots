@@ -75,6 +75,31 @@ def _params_dir() -> Path:
   return Path(root) / os.environ.get('OPENPILOT_PREFIX', 'd')
 
 
+def is_jetlink_paused() -> bool:
+  """Is the big model paused by user request? Reads directly from the params file
+  store so it never raises UnknownKeyName on prebuilt comma installations."""
+  try:
+    return (_params_dir() / KEYS.paused).read_bytes().strip() == b"1"
+  except Exception:
+    return False
+
+
+def set_jetlink_paused(paused: bool) -> None:
+  """Set the big model paused state directly in the params file store."""
+  try:
+    pdir = _params_dir()
+    pdir.mkdir(parents=True, exist_ok=True)
+    target = pdir / KEYS.paused
+    tmp = pdir / f".{KEYS.paused}.tmp"
+    tmp.write_bytes(b"1" if paused else b"0")
+    tmp.replace(target)
+  except Exception:
+    try:
+      (_params_dir() / KEYS.paused).write_bytes(b"1" if paused else b"0")
+    except Exception:
+      pass
+
+
 def _make_keys(keys_cls):
   import dataclasses
   valid = {f.name for f in dataclasses.fields(keys_cls)}
@@ -136,6 +161,8 @@ class Adapter:
     return store
 
   def get(self, key: str):
+    if key == KEYS.paused:
+      return b"1" if is_jetlink_paused() else b"0"
     # read from hardwared and the UI's threads, which UnknownKeyName (a
     # params library older than the key) must not take down
     try:
@@ -144,16 +171,22 @@ class Adapter:
       return None
 
   def put(self, key: str, value, *, block: bool = False) -> None:
+    if key == KEYS.paused:
+      set_jetlink_paused(bool(value))
+      return
     self._params().put(key, value, block=block)
 
   def remove(self, key: str) -> None:
+    if key == KEYS.paused:
+      try:
+        (_params_dir() / KEYS.paused).unlink(missing_ok=True)
+      except Exception:
+        pass
+      return
     self._params().remove(key)
 
   def is_paused(self) -> bool:
-    try:
-      return bool(self._params().get_bool(KEYS.paused))
-    except Exception:
-      return False
+    return is_jetlink_paused()
 
   # -- the device -------------------------------------------------------------
 

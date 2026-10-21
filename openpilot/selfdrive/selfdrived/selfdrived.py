@@ -35,6 +35,7 @@ from openpilot.sunnypilot.selfdrive.selfdrived.button_state_tracker import Butto
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 from openpilot.sunnypilot.selfdrive.selfdrived.events_base import Alert, Priority as AlertPriority
 from openpilot.sunnypilot.selfdrive.selfdrived.model_events import ModelEventsSP
+from openpilot.sunnypilot.jetlink_adapter import is_jetlink_paused, set_jetlink_paused
 
 REPLAY = "REPLAY" in os.environ
 SIMULATION = "SIMULATION" in os.environ
@@ -151,7 +152,7 @@ class SelfdriveD(CruiseHelper):
       self.params
     )
     self._prev_personality_event = self.personality
-    self._prev_jetlink_paused = self.params.get_bool("JetlinkPaused")
+    self._prev_jetlink_paused = is_jetlink_paused()
     self.recalibrating_seen = False
     self.dm_lockout_set = False
     self.dm_uncertain_alerted = False
@@ -528,8 +529,7 @@ class SelfdriveD(CruiseHelper):
 
     # Long press of LKA button toggles Big Model active/paused
     if self.button_frame_counts.get(ButtonType.lkas, 0) >= DISTANCE_LONG_PRESS and not self.big_model_switched:
-      paused = not self.params.get_bool("JetlinkPaused")
-      self.params.put_bool("JetlinkPaused", paused)
+      set_jetlink_paused(not is_jetlink_paused())
       self.big_model_switched = True
 
     # Reset big model switch latch when LKA button is released
@@ -537,7 +537,7 @@ class SelfdriveD(CruiseHelper):
       self.big_model_switched = False
 
     # Check for JetlinkPaused update (e.g. from Toyota LKA hold via card_ext or button frame counts)
-    jetlink_paused = self.params.get_bool("JetlinkPaused")
+    jetlink_paused = is_jetlink_paused()
     if jetlink_paused != self._prev_jetlink_paused:
       self._prev_jetlink_paused = jetlink_paused
       if jetlink_paused:
