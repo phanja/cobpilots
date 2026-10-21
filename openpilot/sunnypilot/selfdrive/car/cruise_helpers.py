@@ -25,7 +25,7 @@ class CruiseHelper:
     self.CP = CP
     self.params = Params()
 
-    self.button_frame_counts = {ButtonType.gapAdjustCruise: 0}
+    self.button_frame_counts = {ButtonType.gapAdjustCruise: 0, ButtonType.lkas: 0}
     self._experimental_mode = False
     self.experimental_mode_switched = False
     self.distance_farther_prev = False

@@ -29,6 +29,7 @@ class CardExt:
     self.handback = StockEcuHandBackServer(params)
     self.params = params
     self._last_pcm_dist = None
+    self._last_sa_toggle = None
 
   def update_v_cruise_post(self, CS, CS_SP) -> None:
     helper = self.v_cruise_helper
@@ -52,6 +53,15 @@ class CardExt:
     if pcm_dist in (1, 2, 3) and pcm_dist != self._last_pcm_dist:
       self._last_pcm_dist = pcm_dist
       self.params.put('LongitudinalPersonality', 3 - int(pcm_dist))
+
+    # Toggle Jetlink Big Model paused state on Toyota LKA button hold (LDA_SA_TOGGLE transition):
+    lkas_hud = getattr(self.car_state, "lkas_hud", {})
+    sa_toggle = lkas_hud.get("LDA_SA_TOGGLE", 0)
+    if self._last_sa_toggle is not None and sa_toggle in (1, 2) and sa_toggle != self._last_sa_toggle:
+      paused = not self.params.get_bool("JetlinkPaused")
+      self.params.put_bool("JetlinkPaused", paused)
+    if sa_toggle in (1, 2):
+      self._last_sa_toggle = sa_toggle
 
   @property
   def stock_ecu_state(self) -> StockEcuState:

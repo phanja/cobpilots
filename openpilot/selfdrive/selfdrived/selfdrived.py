@@ -151,6 +151,7 @@ class SelfdriveD(CruiseHelper):
       self.params
     )
     self._prev_personality_event = self.personality
+    self._prev_jetlink_paused = self.params.get_bool("JetlinkPaused")
     self.recalibrating_seen = False
     self.dm_lockout_set = False
     self.dm_uncertain_alerted = False
@@ -525,11 +526,21 @@ class SelfdriveD(CruiseHelper):
 
     CruiseHelper.update(self, CS, self.events_sp, self.experimental_mode)
 
-    # Long press of distance button toggles Big Model active/paused
-    if self.button_frame_counts[ButtonType.gapAdjustCruise] >= DISTANCE_LONG_PRESS and not self.big_model_switched:
+    # Long press of LKA button toggles Big Model active/paused
+    if self.button_frame_counts.get(ButtonType.lkas, 0) >= DISTANCE_LONG_PRESS and not self.big_model_switched:
       paused = not self.params.get_bool("JetlinkPaused")
       self.params.put_bool("JetlinkPaused", paused)
-      if paused:
+      self.big_model_switched = True
+
+    # Reset big model switch latch when LKA button is released
+    if any(not be.pressed and be.type == ButtonType.lkas for be in CS.buttonEvents):
+      self.big_model_switched = False
+
+    # Check for JetlinkPaused update (e.g. from Toyota LKA hold via card_ext or button frame counts)
+    jetlink_paused = self.params.get_bool("JetlinkPaused")
+    if jetlink_paused != self._prev_jetlink_paused:
+      self._prev_jetlink_paused = jetlink_paused
+      if jetlink_paused:
         alert = Alert("Big Model Paused", "Using small model",
                       log.SelfdriveState.AlertStatus.normal, log.SelfdriveState.AlertSize.small,
                       AlertPriority.LOW, car.CarControl.HUDControl.VisualAlert.none,
@@ -541,16 +552,14 @@ class SelfdriveD(CruiseHelper):
                       car.CarControl.HUDControl.AudibleAlert.prompt, 2.0)
       alert.alert_type = "bigModelStatus"
       self.big_model_alert = alert
-      self.big_model_switched = True
 
     # decrement personality on distance button press
     if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
-      if not self.big_model_switched and not self.experimental_mode_switched:
+      if not self.experimental_mode_switched:
         if self.CP.openpilotLongitudinalControl:
           self.personality = (self.personality - 1) % 3
           self.params.put('LongitudinalPersonality', self.personality)
           self.events.add(EventName.personalityChanged)
-      self.big_model_switched = False
       self.experimental_mode_switched = False
 
     if self.CP.openpilotLongitudinalControl and self.personality != self._prev_personality_event:
