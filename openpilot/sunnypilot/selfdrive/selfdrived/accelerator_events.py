@@ -89,7 +89,7 @@ class AcceleratorEvents:
     elif self.big_model_running and not running_big:
       self.switching = 0
       self.settle = SWITCHING_TICKS + 1   # counted down below, this tick included
-      if in_control:
+      if in_control and not jetlink_adapter.is_jetlink_paused():
         self.handback = HANDBACK_TICKS
     self.big_model_running = running_big
     if self.settle > 0:
@@ -102,7 +102,8 @@ class AcceleratorEvents:
       events_sp.zp.add(EventNameZP.bigModelAvailable)
     if self.handback > 0:
       self.handback -= 1
-      events_sp.zp.add(EventNameZP.bigModelLinkLost)
+      if not jetlink_adapter.is_jetlink_paused():
+        events_sp.zp.add(EventNameZP.bigModelLinkLost)
     if self.switching > 0:
       self.switching -= 1
       # the native block's chime on the swap waits for the end of the second,
