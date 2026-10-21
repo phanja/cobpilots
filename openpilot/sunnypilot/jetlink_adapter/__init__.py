@@ -75,6 +75,12 @@ def _params_dir() -> Path:
   return Path(root) / os.environ.get('OPENPILOT_PREFIX', 'd')
 
 
+def _make_keys(keys_cls):
+  import dataclasses
+  valid = {f.name for f in dataclasses.fields(keys_cls)}
+  return keys_cls(**{k: v for k, v in KEYS._asdict().items() if k in valid})
+
+
 def owner_config():
   """What jetlinkd needs: data only, so the owner imports nothing heavy."""
   from jetlink.openpilot.interface import Keys, OwnerConfig
@@ -82,7 +88,7 @@ def owner_config():
   from openpilot.common.basedir import BASEDIR
   # the provisioning run starts in the checkout with the checkout on its path,
   # where launch_chffrplus.sh links jetlink_repo/jetlink in as jetlink
-  return OwnerConfig(params_dir=_params_dir(), keys=Keys(**KEYS._asdict()), chestnut_ids=CHESTNUT_IDS,
+  return OwnerConfig(params_dir=_params_dir(), keys=_make_keys(Keys), chestnut_ids=CHESTNUT_IDS,
                      adapter=__name__, cwd=Path(BASEDIR), env={'PYTHONPATH': BASEDIR}, log_file=OWNER_LOG)
 
 
@@ -106,7 +112,7 @@ class Adapter:
 
     from openpilot.common.basedir import BASEDIR
     from openpilot.common.swaglog import cloudlog
-    self.keys = Keys(**KEYS._asdict())
+    self.keys = _make_keys(Keys)
     self.log = cloudlog
     self.basedir = Path(BASEDIR)
     # one Params per store: constructing one costs 144 us on the comma against
