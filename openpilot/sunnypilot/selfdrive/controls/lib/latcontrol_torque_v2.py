@@ -58,7 +58,10 @@ class LatControlTorque(LatControlTorqueV0):
     self.is_rav4_prime = (getattr(CP, 'carFingerprint', '') == 'TOYOTA_RAV4_PRIME')
     # v0 already supplies negative measurement rate to the shared PID; the extension holds the
     # same PID object, so the schedule reaches it too
-    self.pid._k_d = [KD_INTERP_SPEEDS, KD_INTERP]
+    if self.is_rav4_prime:
+      self.pid._k_d = ([0.0], [0.0])
+    else:
+      self.pid._k_d = [KD_INTERP_SPEEDS, KD_INTERP]
     # Buffer curvature and apply current v^2 on read to avoid speed-change artifacts in jerk.
     self.curvature_request_buffer = deque([0.] * self.lat_accel_request_buffer_len, maxlen=self.lat_accel_request_buffer_len)
     self.jerk_filter = FirstOrderFilter(0.0, 1 / (2 * np.pi * LP_FILTER_CUTOFF_HZ), self.dt)
@@ -72,11 +75,10 @@ class LatControlTorque(LatControlTorqueV0):
   def update(self, active, CS, VM, params, steer_limited_by_safety, desired_curvature, calibrated_pose, curvature_limited, lat_delay):
     if self.is_rav4_prime:
       # Speed-dependent steering delay for Toyota RAV4 Prime:
-      # Measured lag peaks at 15-30 mph (~0.50s) and settles to ~0.43s on highway.
+      # Empirically matched from 100 Hz rlogs across speed bins:
       # Speeds in m/s: [6.7, 11.2, 15.6, 24.6] (~15, 25, 35, 55 mph)
-      # Delays in sec: [0.428, 0.502, 0.437, 0.437]
       DELAY_SPEED_BP = [6.7, 11.2, 15.6, 24.6]
-      DELAY_VALS = [0.342, 0.365, 0.342, 0.321]
+      DELAY_VALS = [0.350, 0.290, 0.310, 0.270]
       lat_delay = float(np.interp(CS.vEgo, DELAY_SPEED_BP, DELAY_VALS))
 
     # Apply live torque parameters before updating the controller limits.
