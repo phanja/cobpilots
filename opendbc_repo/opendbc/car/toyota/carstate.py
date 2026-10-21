@@ -207,9 +207,6 @@ class CarState(CarStateBase, CarStateExt):
 
         buttonEvents += create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
       elif self.CP.flags & ToyotaFlags.SECOC.value:
-        self.distance_button = int(cp.vl["PCM_CRUISE_4"]["DISTANCE"])
-        buttonEvents += create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
-
         prev_cancel_button = self.cancel_button
         self.cancel_button = int(cp.vl["PCM_CRUISE_4"]["CANCEL"])
         buttonEvents += create_button_events(self.cancel_button, prev_cancel_button, {1: ButtonType.cancel})
