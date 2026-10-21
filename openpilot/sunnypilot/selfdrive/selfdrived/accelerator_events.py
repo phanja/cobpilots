@@ -56,7 +56,7 @@ class AcceleratorEvents:
     flags = self.swap.update(fresh, big, in_control, state=str(sm['modelDataV2SP'].zoompilot.acceleratorState))
     if flags.offer:
       events_sp.zp.add(EventNameZP.bigModelAvailable)
-    if flags.link_lost:
+    if flags.link_lost and not jetlink_adapter.is_jetlink_paused():
       events_sp.zp.add(EventNameZP.bigModelLinkLost)
     if flags.no_entry or flags.chime:
       # the native block's chime on the swap waits for the end of the second,

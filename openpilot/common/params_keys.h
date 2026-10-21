@@ -327,6 +327,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // an iPhone on a direct cable charges from the comma; off by default, some
     // lose the link once the comma powers them
     {"JetlinkChargePhone", {PERSISTENT, BOOL, "0"}},
+    {"JetlinkPaused", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION | CLEAR_ON_IGNITION_ON, BOOL, "0"}},
 
     // one-time markers
     {"DefaultModelApplied", {PERSISTENT | BACKUP, BOOL}},  // Firehose Model applied as the default once (models/default_bootstrap.py)

@@ -32,8 +32,10 @@ from openpilot.sunnypilot.selfdrive.car.car_specific import CarSpecificEventsSP
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.controller import IntelligentCruiseButtonManagement
 from openpilot.sunnypilot.selfdrive.selfdrived.button_state_tracker import ButtonStateTracker
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
+from openpilot.sunnypilot.selfdrive.selfdrived.events_base import Alert, Priority as AlertPriority
 from openpilot.sunnypilot.selfdrive.selfdrived.model_events import ModelEventsSP
 from openpilot.sunnypilot.selfdrive.selfdrived.selfdrived_zp import SelfdrivedZP
+from openpilot.sunnypilot.jetlink_adapter import is_jetlink_paused, set_jetlink_paused
 
 REPLAY = "REPLAY" in os.environ
 SIMULATION = "SIMULATION" in os.environ
@@ -147,6 +149,8 @@ class SelfdriveD:
       self.params
     )
     self._prev_personality_event = self.personality
+    self._prev_jetlink_paused = is_jetlink_paused()
+    self._last_cancel_press_t = 0.0
     self.recalibrating_seen = False
     self.dm_lockout_set = False
     self.dm_uncertain_alerted = False
@@ -184,6 +188,7 @@ class SelfdriveD:
 
     self.button_state_tracker = ButtonStateTracker()
     self.selfdrived_zp = SelfdrivedZP(self.CP, self.params)
+    self.big_model_alert = None
 
   def update_events(self, CS):
     """Compute onroadEvents from carState"""
@@ -523,6 +528,33 @@ class SelfdriveD:
 
     self.personality = self.selfdrived_zp.update(CS, self.sm['carStateSP'], self.events, self.events_sp, self.icbm, self.personality)
 
+    # Double press of CANCEL button toggles Big Model active/paused
+    for be in CS.buttonEvents:
+      if be.type == ButtonType.cancel and be.pressed:
+        now = time.monotonic()
+        if 0.05 < (now - self._last_cancel_press_t) < 0.6:
+          set_jetlink_paused(not is_jetlink_paused())
+          self._last_cancel_press_t = 0.0
+        else:
+          self._last_cancel_press_t = now
+
+    # Check for JetlinkPaused update
+    jetlink_paused = is_jetlink_paused()
+    if jetlink_paused != self._prev_jetlink_paused:
+      self._prev_jetlink_paused = jetlink_paused
+      if jetlink_paused:
+        alert = Alert("Big Model Paused", "Using small model",
+                      log.SelfdriveState.AlertStatus.normal, log.SelfdriveState.AlertSize.small,
+                      AlertPriority.LOW, car.CarControl.HUDControl.VisualAlert.none,
+                      car.CarControl.HUDControl.AudibleAlert.prompt, 2.0)
+      else:
+        alert = Alert("Big Model Resumed", "Ready to engage",
+                      log.SelfdriveState.AlertStatus.normal, log.SelfdriveState.AlertSize.small,
+                      AlertPriority.LOW, car.CarControl.HUDControl.VisualAlert.none,
+                      car.CarControl.HUDControl.AudibleAlert.prompt, 2.0)
+      alert.alert_type = "bigModelStatus"
+      self.big_model_alert = alert
+
     # Decrement personality on distance button press
     if self.CP.openpilotLongitudinalControl:
       if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents) and self.selfdrived_zp.gap_release_steps:
@@ -597,7 +629,12 @@ class SelfdriveD:
     alerts = self.events.create_alerts(self.state_machine.current_alert_types, callback_args)
     alerts_sp = self.events_sp.create_alerts(self.state_machine.current_alert_types, callback_args)
 
-    self.AM.add_many(self.sm.frame, alerts + alerts_sp)
+    extra_alerts = []
+    if getattr(self, "big_model_alert", None) is not None:
+      extra_alerts.append(self.big_model_alert)
+      self.big_model_alert = None
+
+    self.AM.add_many(self.sm.frame, alerts + alerts_sp + extra_alerts)
     self.AM.process_alerts(self.sm.frame, clear_event_types)
 
   def publish_selfdriveState(self, CS):

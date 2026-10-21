@@ -45,10 +45,11 @@ MODES = ('off', 'usb', 'ios')
 # and catalog are the model manager's big-model slot and catalog
 # (models.helpers.ACTIVE_BUNDLE_KEYS['chestnut'] and ModelFetcher's cache): the
 # owner cannot import the model manager, so they are written out here
-_Keys = namedtuple('_Keys', 'link offroad progress spec pointers big_model catalog charge_phone')
+_Keys = namedtuple('_Keys', 'link offroad progress spec pointers big_model catalog charge_phone paused')
 KEYS = _Keys(link='JetlinkLink', offroad='IsOffroad', progress='AcceleratorProgress', spec='JetlinkSpec',
              pointers='JetlinkModelPointers', big_model='ModelManager_ActiveBundleChestnut',
-             catalog='ModelManager_ModelsCache_Chestnut', charge_phone='JetlinkChargePhone')
+             catalog='ModelManager_ModelsCache_Chestnut', charge_phone='JetlinkChargePhone',
+             paused='JetlinkPaused')
 
 _AGNOS = os.path.isfile('/AGNOS')
 
@@ -64,6 +65,37 @@ def _params_dir() -> Path:
   if root is None:
     root = '/data/params' if _AGNOS else os.environ.get('HOME', '') + '/.comma' + prefix + '/params'
   return Path(root) / os.environ.get('OPENPILOT_PREFIX', 'd')
+
+
+def is_jetlink_paused() -> bool:
+  """Is the big model paused by user request? Reads directly from the params file
+  store so it never raises UnknownKeyName on prebuilt comma installations."""
+  try:
+    return (_params_dir() / KEYS.paused).read_bytes().strip() == b"1"
+  except Exception:
+    return False
+
+
+def set_jetlink_paused(paused: bool) -> None:
+  """Set the big model paused state directly in the params file store."""
+  try:
+    pdir = _params_dir()
+    pdir.mkdir(parents=True, exist_ok=True)
+    target = pdir / KEYS.paused
+    tmp = pdir / f".{KEYS.paused}.tmp"
+    tmp.write_bytes(b"1" if paused else b"0")
+    tmp.replace(target)
+  except Exception:
+    try:
+      (_params_dir() / KEYS.paused).write_bytes(b"1" if paused else b"0")
+    except Exception:
+      pass
+
+
+def _make_keys(keys_cls):
+  import dataclasses
+  valid = {f.name for f in dataclasses.fields(keys_cls)}
+  return keys_cls(**{k: v for k, v in KEYS._asdict().items() if k in valid})
 
 
 def link_on() -> bool:
@@ -91,9 +123,32 @@ def _adapter_class():
   class Adapter(Stock):
     """jetlink.openpilot.interface.Openpilot over this fork: stock openpilot
     but for what follows."""
-    KEYS = Keys(**KEYS._asdict())
+    KEYS = _make_keys(Keys)
     # MADS's state rides on carControlSP
     IN_CONTROL_SERVICES = ('carState', 'carControl', 'carControlSP')
+
+    def is_paused(self) -> bool:
+      return is_jetlink_paused()
+
+    def get(self, key: str):
+      if key == KEYS.paused:
+        return b"1" if is_jetlink_paused() else b"0"
+      return super().get(key)
+
+    def put(self, key: str, value, *, block: bool = False) -> None:
+      if key == KEYS.paused:
+        set_jetlink_paused(bool(value))
+        return
+      super().put(key, value, block=block)
+
+    def remove(self, key: str) -> None:
+      if key == KEYS.paused:
+        try:
+          (_params_dir() / KEYS.paused).unlink(missing_ok=True)
+        except Exception:
+          pass
+        return
+      super().remove(key)
 
     @property
     def catalog_selector(self) -> int:
