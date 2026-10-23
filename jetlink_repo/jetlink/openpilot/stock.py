@@ -234,6 +234,9 @@ class Stock:
     self._in_control_error = None
     return bool(result)
 
+  def is_paused(self) -> bool:
+    return False
+
   def event(self, name: str, **fields) -> None:
     self.log.event(name, **fields)
 

@@ -56,6 +56,7 @@ class CarState(CarStateBase):
     self.pedal_ready = False
     self.lkas_button = 0
     self.distance_button = 0
+    self.cancel_button = 0
 
     self.pcm_follow_distance = 0
 
@@ -257,6 +258,10 @@ class CarState(CarStateBase):
         self.distance_button = cp_acc.vl["ACC_CONTROL"]["DISTANCE"]
 
         buttonEvents += create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
+      elif self.CP.flags & ToyotaFlags.SECOC.value:
+        prev_cancel_button = self.cancel_button
+        self.cancel_button = int(cp.vl["PCM_CRUISE_4"]["CANCEL"])
+        buttonEvents += create_button_events(self.cancel_button, prev_cancel_button, {1: ButtonType.cancel})
 
     if (self.CP.carFingerprint in (CAR.TOYOTA_PRIUS, CAR.TOYOTA_PRIUS_RETROFIT) or
         self.CP.flags & ToyotaFlags.LONG_FILTER or advert_filter.configured(self.CP)):
@@ -352,6 +357,8 @@ class CarState(CarStateBase):
 
     if CP.carFingerprint == CAR.TOYOTA_SIENNA_4TH_GEN:
       pt_messages.append(("PCM_CRUISE_4", 1))
+    elif CP.flags & ToyotaFlags.SECOC.value:
+      pt_messages.append(("PCM_CRUISE_4", float('nan')))
     from opendbc.car.toyota import camera_2aa_filter
     camera_twoaa = camera_2aa_filter.configured(CP)
     legacy_advert = legacy_advert_filter.configured(CP)
