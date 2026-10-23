@@ -164,8 +164,8 @@ def update_jetlink_swaps(owner, in_control, state=None):
 def jetlink_lost_alert():
   """The Jetlink big model left while in control: the small model drives on and nothing disengages."""
   from openpilot.selfdrive.selfdrived.events import ET, Alert, Priority
-  alert = Alert("Big Model Lost", "Using small model", log.SelfdriveState.AlertStatus.userPrompt,
-                log.SelfdriveState.AlertSize.mid, Priority.MID, car.CarControl.HUDControl.VisualAlert.steerRequired,
-                log.SelfdriveState.AudibleAlert.warningSoft, .2)
+  alert = Alert("Big Model Lost", "Using small model", log.SelfdriveState.AlertStatus.normal,
+                log.SelfdriveState.AlertSize.small, Priority.LOW, car.CarControl.HUDControl.VisualAlert.none,
+                log.SelfdriveState.AudibleAlert.prompt, .2)
   alert.alert_type, alert.event_type = 'jetlinkLinkLost/warning', ET.WARNING
   return alert
