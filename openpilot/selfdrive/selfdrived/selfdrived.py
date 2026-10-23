@@ -235,6 +235,9 @@ class SelfdriveD:
     self.experimental_mode = False
     self.requested_experimental_mode = False
     self.personality = self.params.get("LongitudinalPersonality", return_default=True)
+    self._prev_jetlink_paused = jetlink_adapter.is_jetlink_paused()
+    self._last_cancel_press_t = 0.0
+    self.big_model_alert = None
     self.recalibrating_seen = False
     self.dm_lockout_set = False
     self.dm_uncertain_alerted = False
@@ -301,6 +304,16 @@ class SelfdriveD:
       self.events.add(EventName.controlsMismatch)
 
   def _update_car_event_sample(self, CS, previous):
+    # Double press of CANCEL button toggles Big Model active/paused
+    for be in CS.buttonEvents:
+      if be.type == ButtonType.cancel and be.pressed:
+        now = time.monotonic()
+        if 0.05 < (now - self._last_cancel_press_t) < 0.6:
+          jetlink_adapter.set_jetlink_paused(not jetlink_adapter.is_jetlink_paused())
+          self._last_cancel_press_t = 0.0
+        else:
+          self._last_cancel_press_t = now
+
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
     if not self.CP.pcmCruise and CS.vCruise > 250 and resume_pressed:
@@ -1197,7 +1210,28 @@ class SelfdriveD:
     else:
       # Retire only this presentation; retain every original safety alert.
       self.AM.alerts.pop('aolAvailability/warning', None)
-    if getattr(self, 'jetlink_link_lost', False):
+
+    jetlink_paused = jetlink_adapter.is_jetlink_paused()
+    if jetlink_paused != self._prev_jetlink_paused:
+      self._prev_jetlink_paused = jetlink_paused
+      if jetlink_paused:
+        alert = Alert("Big Model Paused", "Using small model",
+                      log.SelfdriveState.AlertStatus.normal, log.SelfdriveState.AlertSize.small,
+                      AlertPriority.LOW, car.CarControl.HUDControl.VisualAlert.none,
+                      log.SelfdriveState.AudibleAlert.prompt, 2.0)
+      else:
+        alert = Alert("Big Model Resumed", "Ready to engage",
+                      log.SelfdriveState.AlertStatus.normal, log.SelfdriveState.AlertSize.small,
+                      AlertPriority.LOW, car.CarControl.HUDControl.VisualAlert.none,
+                      log.SelfdriveState.AudibleAlert.prompt, 2.0)
+      alert.alert_type, alert.event_type = "bigModelStatus", ET.WARNING
+      self.big_model_alert = alert
+
+    if self.big_model_alert is not None:
+      alerts.append(self.big_model_alert)
+      self.big_model_alert = None
+
+    if getattr(self, 'jetlink_link_lost', False) and not jetlink_paused:
       alerts.append(jetlink_lost_alert())
     self.AM.add_many(self.sm.frame, alerts)
     self.AM.process_alerts(self.sm.frame, clear_event_types)

@@ -46,6 +46,48 @@ def aol_in_control(intent, alive, axes, waiting=False) -> bool:
   return any(axes)
 
 
+def _params_dir():
+  from pathlib import Path
+  prefix = os.environ.get("OPENPILOT_PREFIX", "")
+  root = os.environ.get("PARAMS_ROOT") or ("/data/params" if os.path.isfile("/AGNOS") else
+                                           os.path.expanduser(f"~/.comma{prefix}/params"))
+  return Path(root) / os.environ.get("OPENPILOT_PREFIX", "d")
+
+
+_last_paused_check = 0.0
+_cached_paused = False
+
+
+def is_jetlink_paused() -> bool:
+  global _last_paused_check, _cached_paused
+  now = time.monotonic()
+  if now - _last_paused_check > 0.1:
+    _last_paused_check = now
+    try:
+      _cached_paused = (_params_dir() / "JetlinkPaused").read_bytes().strip() == b"1"
+    except Exception:
+      _cached_paused = False
+  return _cached_paused
+
+
+def set_jetlink_paused(paused: bool) -> None:
+  global _cached_paused, _last_paused_check
+  _cached_paused = paused
+  _last_paused_check = time.monotonic()
+  try:
+    pdir = _params_dir()
+    pdir.mkdir(parents=True, exist_ok=True)
+    target = pdir / "JetlinkPaused"
+    tmp = pdir / ".JetlinkPaused.tmp"
+    tmp.write_bytes(b"1" if paused else b"0")
+    tmp.replace(target)
+  except Exception:
+    try:
+      (_params_dir() / "JetlinkPaused").write_bytes(b"1" if paused else b"0")
+    except Exception:
+      pass
+
+
 @functools.cache
 def _adapter_class():
   from jetlink.openpilot.interface import Keys
@@ -55,10 +97,13 @@ def _adapter_class():
     # Active Big's choice for Jetlink, by the ONNX's hash (jetlink_settings), and no catalog: jetlink writes a
     # newer choice made in its app into it, and with none runs the app's choice or its default model
     KEYS = Keys(link="JetlinkMode", offroad="IsOffroad", progress="JetlinkProgress", spec="JetlinkSpec",
-                pointers="JetlinkPointers", big_model="JetlinkModel", charge_phone="JetlinkChargePhone")
+                pointers="JetlinkPointers", big_model="JetlinkModel", charge_phone="JetlinkChargePhone", paused="JetlinkPaused")
     IN_CONTROL_SERVICES = ("carControl", "selfdriveState")
     _aol = None
     _aol_since = 0.
+
+    def is_paused(self) -> bool:
+      return is_jetlink_paused()
 
     def model_root(self):
       from openpilot.starpilot.models.manager import ROOT

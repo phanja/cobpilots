@@ -130,7 +130,7 @@ class JoiningModelState:
   """
 
   def __init__(self, small, connect, build, prepare=None, reset_small=None, *, progress, log, in_control=None,
-               name=None):
+               name=None, is_paused=None):
     self._small = small
     self._active = small
     self._connect = connect
@@ -138,6 +138,7 @@ class JoiningModelState:
     self._reset_small = reset_small
     self._progress = progress
     self._log = log
+    self._is_paused = is_paused
 
     # whatever the swap would otherwise do on the frame loop, done now on
     # modeld's main thread before the frame loop exists; at the swap it costs
@@ -235,7 +236,9 @@ class JoiningModelState:
   def big_model_available(self) -> bool:
     """Connected and waiting to switch: what big_model_state calls ready, and
     what the driver is offered."""
-    return not self._stop.is_set() and self._available and self._active is self._small
+    if self._is_paused is not None and self._is_paused():
+      return False
+    return not self._stop.is_set() and (self._available or self._big is not None) and self._active is self._small
 
   @property
   def chestnut(self) -> bool:
@@ -254,7 +257,7 @@ class JoiningModelState:
   @property
   def big_model_state(self) -> str:
     """modelDataV2SP.acceleratorState, one of its enum names (STATES)."""
-    if self._stop.is_set():
+    if self._stop.is_set() or (self._is_paused is not None and self._is_paused()):
       return 'unavailable'
     if self._active is not self._small:
       return 'running'
@@ -328,6 +331,19 @@ class JoiningModelState:
   def run(self, bufs, transforms, inputs, after_enqueue=None):
     if self._ask_in_control is not None:
       self.in_control = self._ask_in_control()
+    if self._is_paused is not None and self._is_paused():
+      if self._active is not self._small:
+        self._log.warning("jetlink: big model paused by user, switching to small model")
+        # Keep self._big alive and ready so we can resume immediately without rebuilding or reconnecting.
+        self._active = self._small
+        self._handovers += 1
+        if self._big is not None:
+          self._big._need_reset = True
+        if self._reset_small is not None:
+          self._reset_small()
+      self._small_frames += 1
+      return self._small.run(bufs, transforms, inputs, after_enqueue)
+
     if self._lagging:
       # the last frame was the large model's last, published as it came
       self._lagging = False
@@ -388,6 +404,15 @@ class JoiningModelState:
     Its first frame resets the host's history. A build that fails is backed
     off like a demote, or one that fails the same way every time is a connect
     and a build per second for the drive."""
+    if self._is_paused is not None and self._is_paused():
+      return
+    if self._big is not None and self._active is self._small:
+      self._big.lat_delay = getattr(self._small, 'lat_delay', self._big.lat_delay)
+      self._big._need_reset = True
+      self._active = self._big
+      self._handovers += 1
+      self._log.warning("jetlink: big model resumed by user, switching back to large model")
+      return
     if self._joined is None or self._in_control or self._small_frames < SMALL_WARMUP_FRAMES:
       return
     with self._lock:
@@ -783,4 +808,4 @@ def join(parts, cam_w: int, cam_h: int, small) -> JoiningModelState:
 
   return JoiningModelState(small, connect, build, prepare, reset_small=lambda: ready['reset_small'](),
                            progress=parts.progress, log=parts.log, in_control=op.in_control,
-                           name=parts.models.name_for)
+                           name=parts.models.name_for, is_paused=getattr(op, 'is_paused', None))
