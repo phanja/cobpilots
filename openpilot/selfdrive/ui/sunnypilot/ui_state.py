@@ -47,6 +47,7 @@ class UIStateSP(UIStateZP):
     self.screensaver_enabled: bool = False
 
     self.active_bundle = None
+    self.active_source: str = "qcom"
     self.model_runner_tinygrad: bool = False
     self.blindspot: bool = False
     self.chevron_metrics = None
@@ -160,6 +161,7 @@ class UIStateSP(UIStateZP):
     self._enforce_constraints()
     source = get_active_source(chestnut=self.chestnut_present, chestnut_active=self.chestnut_active,
                                chestnut_loading=self.chestnut_loading, offroad=self.is_offroad())
+    self.active_source = source
     self.active_bundle = self.params.get(ACTIVE_BUNDLE_KEYS[source])
     self.model_runner_tinygrad = self.active_bundle is not None and self.active_bundle.get("runner") == "tinygrad"
     # stock only counts the default big model's compiled pkl. a downloaded big bundle runs on the

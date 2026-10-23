@@ -82,8 +82,18 @@ sections:
   items:
   - key: CameraOffset
     widget: option
-    title: Adjust Camera Offset
-    description: Virtually shift camera's perspective to move model's center to Left(+ values) or Right (- values)
+    title: Adjust Camera Offset (Small Model)
+    description: Virtually shift camera's perspective to move Small Model's center to Left(+ values) or Right (- values)
+    min: -0.35
+    max: 0.35
+    step: 0.01
+    unit: meters
+    enablement:
+    - $ref: '#/macros/advanced_only'
+  - key: CameraOffsetBig
+    widget: option
+    title: Adjust Camera Offset (Big Model)
+    description: Virtually shift camera's perspective to move Big Model's center to Left(+ values) or Right (- values)
     min: -0.35
     max: 0.35
     step: 0.01

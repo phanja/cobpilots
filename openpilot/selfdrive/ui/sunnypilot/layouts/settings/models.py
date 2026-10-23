@@ -52,7 +52,12 @@ class ModelsLayout(Widget):
     self._initialize_items()
 
     self.clear_cache_item.action_item.set_value(f"{self.calculate_cache_size():.2f} MB")
-    for ctrl, key in [(self.lane_turn_value_control, "LaneTurnValue"), (self.delay_control, "LagdToggleDelay"), (self.camera_offset, "CameraOffset")]:
+    for ctrl, key in [
+      (self.lane_turn_value_control, "LaneTurnValue"),
+      (self.delay_control, "LagdToggleDelay"),
+      (self.camera_offset, "CameraOffset"),
+      (self.camera_offset_big, "CameraOffsetBig"),
+    ]:
       ctrl.action_item.set_value(int(float(ui_state.params.get(key, return_default=True)) * 100))
 
     self._scroller = Scroller(self.items, line_separator=True, spacing=0)
@@ -114,14 +119,20 @@ class ModelsLayout(Widget):
 
     self.lagd_toggle = toggle_item_sp(tr("Live Learning Steer Delay"), "", param="LagdToggle")
 
-    self.camera_offset = option_item_sp(tr("Adjust Camera Offset"), "CameraOffset", -35, 35,
-                                        tr("Virtually shift camera's perspective to move model's center to Left(+ values) or Right (- values)"),
+    self.camera_offset = option_item_sp(tr("Adjust Camera Offset (Small Model)"), "CameraOffset", -35, 35,
+                                        tr("Virtually shift camera's perspective to move Small Model's center to Left(+ values) or Right (- values)"),
                                         1, None, True, "", style.BUTTON_ACTION_WIDTH, None, True,
                                         lambda v: f"{v / 100:.2f} m")
 
+    self.camera_offset_big = option_item_sp(tr("Adjust Camera Offset (Big Model)"), "CameraOffsetBig", -35, 35,
+                                            tr("Virtually shift camera's perspective to move Big Model's center to Left(+ values) or Right (- values)"),
+                                            1, None, True, "", style.BUTTON_ACTION_WIDTH, None, True,
+                                            lambda v: f"{v / 100:.2f} m")
+
     self.items = [self.small_model_item, self.big_model_item, self.accelerator_link_item, self.cancel_download_item,
                   self.download_item, self.refresh_item, self.clear_cache_item,
-                  self.lane_turn_desire_toggle, self.lane_turn_value_control, self.lagd_toggle, self.delay_control, self.camera_offset]
+                  self.lane_turn_desire_toggle, self.lane_turn_value_control, self.lagd_toggle, self.delay_control,
+                  self.camera_offset, self.camera_offset_big]
     self._refresh_accelerator_items()
 
   @staticmethod
@@ -371,7 +382,8 @@ class ModelsLayout(Widget):
     advanced_controls: bool = ui_state.params.get_bool("ShowAdvancedControls")
     turn_desire: bool = ui_state.params.get_bool("LaneTurnDesire")
     live_delay: bool = ui_state.params.get_bool("LagdToggle")
-    camera_offset: bool = ui_state.active_bundle is not None
+    small_bundle = get_selected_bundle(ui_state.params, "qcom")
+    big_bundle = get_selected_bundle(ui_state.params, "chestnut")
 
     self.lane_turn_desire_toggle.action_item.set_state(turn_desire)
     self.lane_turn_value_control.set_visible(turn_desire and advanced_controls)
@@ -380,7 +392,8 @@ class ModelsLayout(Widget):
     new_step = int(round(100 / CV.MPH_TO_KPH)) if ui_state.is_metric else 100
     if self.lane_turn_value_control.action_item is not None and self.lane_turn_value_control.action_item.value_change_step != new_step:
       self.lane_turn_value_control.action_item.value_change_step = new_step
-    self.camera_offset.set_visible(camera_offset)
+    self.camera_offset.set_visible(small_bundle is not None)
+    self.camera_offset_big.set_visible(big_bundle is not None)
 
     self._update_lagd_description(live_delay)
     self.model_manager = ui_state.sm["modelManagerSP"]

@@ -421,7 +421,9 @@ def main(demo=False):
     if sm.frame % 60 == 0:
       model.lat_delay = get_lat_delay(params, sm["lateralDelay"].lateralDelay)
       model.PLANPLUS_CONTROL = params.get("PlanplusControl", return_default=True)
-      camera_offset_helper.set_offset(params.get("CameraOffset", return_default=True))
+      is_big_model = getattr(model, "chestnut", False) or params.get_bool("ChestnutActive")
+      offset_param = "CameraOffsetBig" if is_big_model else "CameraOffset"
+      camera_offset_helper.set_offset(params.get(offset_param, return_default=True))
     lat_delay = model.lat_delay + model.LAT_SMOOTH_SECONDS
     long_delay = CP.longitudinalActuatorDelay + model.LONG_SMOOTH_SECONDS
     if sm.updated["extrinsicsCalibration"] and sm.seen['narrowRoadCameraState'] and sm.seen['deviceState']:
