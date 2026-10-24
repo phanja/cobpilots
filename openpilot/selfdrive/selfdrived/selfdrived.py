@@ -701,7 +701,7 @@ class SelfdriveD:
 
     # TODO: fix simulator
     if not SIMULATION or REPLAY:
-      if self.sm['modelV2'].frameDropPerc > 1 and not big_model_settling:
+      if self.sm['modelV2'].frameDropPerc > 20 and not big_model_settling:
         self.events.add(EventName.modeldLagging)
 
     # Decrement personality on distance button press
@@ -1948,7 +1948,7 @@ class SelfdriveD:
         expired_healthy_source=getattr(self, 'aol_expired_healthy_source', False),
         previously_active=previous.lateral_active, hard_fault=bool(
           self.aol_selected_pair_future or self.aol_authority_lost or lost_active_aol or lost_permission or self.events.contains(ET.IMMEDIATE_DISABLE) or
-          self.events.contains(ET.SOFT_DISABLE)),
+          (self.events.contains(ET.SOFT_DISABLE) and not availability_only(self.events.to_msg()))),
         model_ready=bool(self.sm.all_checks(['modelV2', 'extrinsicsCalibration']) and
           self.sm['extrinsicsCalibration'].calStatus == log.ExtrinsicsCalibration.Status.calibrated),
         user_disable=self.events.contains(ET.USER_DISABLE))
