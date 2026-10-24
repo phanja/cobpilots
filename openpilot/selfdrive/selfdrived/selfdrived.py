@@ -33,6 +33,7 @@ from openpilot.starpilot.models import jetlink_adapter
 from openpilot.system.manager.process_health import driving_process_failures
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from opendbc.car.gm.aol import qualified_gm
+from openpilot.starpilot.car.toyota.aol import qualified as toyota_qualified
 from openpilot.starpilot.aol.vehicle import native_bootstrap_supported
 from opendbc.car.gm.steering_authority import monitored_profile
 from openpilot.starpilot.car.gm.steering_companion import SteeringCompanion
@@ -871,6 +872,7 @@ class SelfdriveD:
     stock_cruise_off = bool(proof is not None and proof[8] and not proof[9] and
       not self.enabled and not self.active and not CS.cruiseState.enabled and
       (qualified_stock_hkg(self.CP, marked_only=True) or
+       toyota_qualified(self.CP, marked_only=True) or
        qualified_angle_aol(self.CP, marked_only=True) and self.CP.pcmCruise and not self.CP.openpilotLongitudinalControl) and
       EventName.pcmDisable in self.events_prev and self.events.names == self.events_prev)
     user_disable = any(event.userDisable and
@@ -1293,11 +1295,14 @@ class SelfdriveD:
       self.aol_publication_retained_intent = intent
       return
     pause = getattr(self, 'aol_availability_pause', None)
+    stock_toyota = bool(toyota_qualified(self.CP, marked_only=True) and self.CP.pcmCruise and
+      not self.enabled and not self.active and not CS.cruiseState.enabled)
     if (healthy_expiry and pause is not None and intent is not None and
         getattr(self, 'aol_fault_reason', 'none') in ('none', 'availabilityPause') and
         not self.aol_authority_lost and not self.events.contains(ET.IMMEDIATE_DISABLE) and
         (not self.events.contains(ET.SOFT_DISABLE) or availability_only(self.events.to_msg())) and
-        not self.events.contains(ET.USER_DISABLE)):
+        (not self.events.contains(ET.USER_DISABLE) or (
+          stock_toyota and all(e.name in (EventName.pcmDisable, EventName.gasPressedOverride) for e in self.events.to_msg() if e.userDisable)))):
       self.events.add(EventName.commIssue)
       native = current_native(self.sm, self.CP, now_ns=now_ns, axis_session_id=self.aol_session_id)
       from openpilot.starpilot.aol.transport_pause import _healthy_transport_native
@@ -1373,7 +1378,7 @@ class SelfdriveD:
       from opendbc.car.hyundai.canfd_stock_aol import qualified as stock_canfd_qualified
       from openpilot.starpilot.car.toyota.aol import qualified as toyota_qualified
 
-      if (toyota_qualified(self.CP, marked_only=True) and CS.standstill or
+      if (toyota_qualified(self.CP, marked_only=True) or
           angle_qualified(self.CP, marked_only=True) or
           self.CP.brand == 'hyundai' and CS.brakePressed and len(self.CP.safetyConfigs) == 1 and
           stock_canfd_qualified(self.CP, marked_only=True)):
@@ -1385,7 +1390,7 @@ class SelfdriveD:
       # A fresh same-owner source can establish its own LAT permission after
       # an old output expires. Held-brake continuity does not renew that output;
       # the current native proof below still has to grant the new decision.
-      stock_already_off = bool(fresh_successor and qualified_gm(self.CP) and self.CP.pcmCruise and
+      stock_already_off = bool(fresh_successor and (qualified_gm(self.CP) or toyota_qualified(self.CP, marked_only=True)) and self.CP.pcmCruise and
         not self.CP.openpilotLongitudinalControl and not CS.cruiseState.enabled and
         not self.CS_prev.cruiseState.enabled and all(valid and not sample.cruiseState.enabled
           for sample, valid in getattr(self, 'car_state_samples', ())))
