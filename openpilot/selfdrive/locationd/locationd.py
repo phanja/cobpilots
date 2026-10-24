@@ -293,6 +293,8 @@ def main():
       P_initial = np.diag(np.array(filter_state.std, dtype=np.float64)) if len(filter_state.std) != 0 else PoseKalman.initial_P
       estimator.reset(None, x_initial, P_initial)
 
+  cam_odom_invalid_frames = 0
+
   while True:
     sm.update()
 
@@ -328,8 +330,14 @@ def main():
       filter_initialized = sm.all_checks() and sensor_all_checks(acc_msgs, gyro_msgs, sensor_valid, sensor_recv_time, sensor_alive, SIMULATION)
 
     if sm.updated["cameraOdometry"]:
+      if not sm.valid["cameraOdometry"]:
+        cam_odom_invalid_frames += 1
+      else:
+        cam_odom_invalid_frames = 0
+
       critical_service_inputs_valid = all(observation_input_invalid[s] < input_invalid_threshold[s] for s in critical_services)
-      inputs_valid = sm.all_valid() and critical_service_inputs_valid
+      cam_odom_ok = cam_odom_invalid_frames <= 10
+      inputs_valid = sm.all_valid(['carState', 'extrinsicsCalibration']) and critical_service_inputs_valid and cam_odom_ok
       sensors_valid = sensor_all_checks(acc_msgs, gyro_msgs, sensor_valid, sensor_recv_time, sensor_alive, SIMULATION)
 
       msg = estimator.get_msg(sensors_valid, inputs_valid, filter_initialized)
