@@ -43,7 +43,7 @@ class CarInterface(CarInterfaceBase):
   CarController = CarController
   RadarInterface = RadarInterface
 
-  DRIVABLE_GEARS = (structs.CarState.GearShifter.sport,)
+  DRIVABLE_GEARS = (structs.CarState.GearShifter.sport, structs.CarState.GearShifter.brake)
 
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed):

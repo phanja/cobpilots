@@ -25,6 +25,7 @@ from openpilot.common.realtime import DT_CTRL
 
 COROLLA = str(CAR.TOYOTA_COROLLA_TSS2)
 SIENNA_4G = str(CAR.TOYOTA_SIENNA_4TH_GEN)
+RAV4_PRIME = str(CAR.TOYOTA_RAV4_PRIME)
 _ACCEL_MIN, _ACCEL_MAX = -5.0, 3.0
 RADAR_MAX_AGE_NS = 100_000_000  # Two periods of the current 20 Hz radarState service.
 CLOCK_PAIR_MAX_SKEW_NS = 5_000_000
@@ -114,9 +115,9 @@ def _radar_lead_rows(radar):
 
 
 def eligible(cp) -> bool:
-  """Only the two current Toyota controllers with actual openpilot long."""
+  """Only the current Toyota controllers with actual openpilot long."""
   try:
-    return (cp.brand == 'toyota' and str(cp.carFingerprint) in (COROLLA, SIENNA_4G) and
+    return (cp.brand == 'toyota' and str(cp.carFingerprint) in (COROLLA, SIENNA_4G, RAV4_PRIME) and
             cp.openpilotLongitudinalControl is True and not cp.dashcamOnly and
             not cp.passive and not cp.notCar)
   except AttributeError:
@@ -137,7 +138,7 @@ def production_enabled(cp) -> bool:
       cp.flags & required != required or int(cp.flags) & ~int(allowed)):
     return False
   config = cp.safetyConfigs[0]
-  expected = EPS_SCALE[CAR.TOYOTA_SIENNA_4TH_GEN] | int(ToyotaSafetyFlags.SECOC)
+  expected = EPS_SCALE[cp.carFingerprint] | int(ToyotaSafetyFlags.SECOC)
   return config.safetyModel == structs.CarParams.SafetyModel.toyota and config.safetyParam == expected
 
 

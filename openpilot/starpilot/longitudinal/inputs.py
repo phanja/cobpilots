@@ -9,7 +9,7 @@ from opendbc.car.hyundai.blended_stopping import eligible as blended_longitudina
 
 from openpilot.starpilot.feature_runtime import enabled as feature_enabled
 from openpilot.starpilot.conditional_mode.traffic_launch import TrafficLaunchState
-from openpilot.starpilot.longitudinal.toyota_output_policy import (CLOCK_PAIR_MAX_SKEW_NS, COROLLA, SIENNA_4G, clock_pair_ns,
+from openpilot.starpilot.longitudinal.toyota_output_policy import (CLOCK_PAIR_MAX_SKEW_NS, COROLLA, SIENNA_4G, RAV4_PRIME, clock_pair_ns,
                                                                  development_enabled as toyota_development_enabled,
                                                                  production_enabled as toyota_production_enabled, leads_from_radar)
 from openpilot.starpilot.longitudinal.ioniq6_start import StartEvidence, eligible as ioniq6_start_eligible
@@ -82,7 +82,7 @@ class LongitudinalInputs:
     self.toyota_sienna_replay = toyota_development_enabled(self.CP) and str(self.CP.carFingerprint) == SIENNA_4G
     toyota_production = toyota_production_enabled(self.CP)
     self.toyota_corolla_stop = toyota_production and str(self.CP.carFingerprint) == COROLLA
-    self.toyota_sienna_production = toyota_production and str(self.CP.carFingerprint) == SIENNA_4G
+    self.toyota_sienna_production = toyota_production and str(self.CP.carFingerprint) in (SIENNA_4G, RAV4_PRIME)
     self.ioniq6_start_enabled = ioniq6_start_eligible(self.CP)
     gm_policy = gm_pedal_policy_for(self.CP)
     self.gm_start_enabled = gm_policy is not None and gm_policy.friction_variant
