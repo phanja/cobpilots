@@ -202,7 +202,7 @@ def verify(packet, engine, frames):
     if (any(type(flag) is not bool for flag in flags) or
         any(type(stamp) is not int for stamp in (control.control_ns,control.state_ns,control.source_receipt_ns,
           control.native_observed_ns,control.native_expires_ns)) or
-        not 0 < control.state_ns <= control.control_ns <= control.state_ns+30_000_000 or
+        not 0 < control.state_ns <= control.control_ns <= control.state_ns+50_000_000 or
         not 0 < control.source_receipt_ns <= control.control_ns <= control.source_receipt_ns+500_000_000 or
         control.identity != engine.identity or control.baseline_revision != engine.baseline_revision or
         control.source_epoch != engine.objective.context_key or

@@ -40,9 +40,9 @@ def consumed_sources_current(control, output):
     return bool(all(type(stamp) is int and stamp > 0 for stamp in stamps) and
                 control.state_ns <= control.control_ns <= output.apply_ns and
                 control.state_ns <= output.state_ns <= output.apply_ns and
-                control.control_ns - control.state_ns <= 30_000_000 and
-                output.apply_ns - output.state_ns <= 30_000_000 and
-                output.apply_ns - control.control_ns <= 30_000_000)
+                control.control_ns - control.state_ns <= 50_000_000 and
+                output.apply_ns - output.state_ns <= 50_000_000 and
+                output.apply_ns - control.control_ns <= 50_000_000)
   except (AttributeError, TypeError, ValueError, OverflowError):
     return False
 

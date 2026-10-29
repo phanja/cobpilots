@@ -45,7 +45,7 @@ def _restore_original_evidence(payload, engine, objective):
       if (key in seen or point['mono_ns'] <= previous or command.identity != engine.identity or
           command.baseline_revision != engine.baseline_revision or command.source_epoch != envelope.source_epoch or
           not 0 < command.source_receipt_ns <= command.control_ns <= command.source_receipt_ns + 500_000_000 or
-          not 0 < command.state_ns <= command.control_ns <= command.state_ns + 30_000_000 or
+          not 0 < command.state_ns <= command.control_ns <= command.state_ns + 50_000_000 or
           not consumed_sources_current(command, output) or
           not command.control_ns <= output.apply_ns <= command.control_ns + 100_000_000 or
           command.native_required and (not command.native_allowed or not command.native_identity or

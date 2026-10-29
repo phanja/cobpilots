@@ -552,7 +552,7 @@ class Controls:
         self.steer_limited_by_safety = abs(CC.actuators.steeringAngleDeg - CO.actuatorsOutput.steeringAngleDeg) > \
                                               STEER_ANGLE_SATURATION_THRESHOLD
       else:
-        self.steer_limited_by_safety = abs(CC.actuators.torque - CO.actuatorsOutput.torque) > 1e-2
+        self.steer_limited_by_safety = bool(lac_log.saturated) or (abs(CO.actuatorsOutput.torque) >= 1.0 - 1e-3)
 
     else:
       self.steer_limited_by_safety = False

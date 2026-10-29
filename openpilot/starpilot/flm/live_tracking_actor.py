@@ -389,6 +389,9 @@ class LiveTrackingActor:
     if self.process is not None and self.process.child is not None:
       return  # At most one optional reconstruction/identification child.
     optimizer = self.ingress.optimizer
+    if (optimizer.offer_state is None and optimizer.status == 'paused' and
+        optimizer.reason in ('current_evidence_delayed', 'learning_evidence_delayed')):
+      optimizer.status, optimizer.reason = 'collecting', 'qualified_tracking_episodes_required'
     self.reason = optimizer.reason
     accepted = tuple((name, optimizer.accepted[name]) for name in NAMES)
     profile_hash = full_profile_sha256(self.certificate.binding.baseline_revision, dict(accepted))
@@ -846,11 +849,11 @@ class LiveTrackingActor:
       from openpilot.starpilot.flm.live_tracking_response import source_context
 
       capture = collector.original_source_capture
-      if capture is not None and capture.rows:
+      if capture is not None and capture.rows and collector.ready:
         try:
           context = source_context(seed, collector.ready[-1][0], capture.rows[-1], now_ns=now_ns)
           self.adopt_response(context, collector)
-        except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError, OverflowError) as error:
           context_error = error
           self.reason = 'current_original_tracking_sources_required'
     if self.ingress is None and self.source_tracking:

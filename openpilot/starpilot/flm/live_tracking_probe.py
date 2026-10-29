@@ -79,7 +79,7 @@ def validate_probe_result(value, binding=None):
     or tuple(row.name for row in value.rows) != probe_names(tuple(row.name for row in value.rows))
     or any(row.name not in PROBE_GROUPS[value.group] or value.controller_domain == 'torque_pid' and row.name not in SUPPORTED for row in value.rows)
     or any(type(stamp) is not int for stamp in (value.control_ns, value.apply_ns))
-    or not 0 < value.control_ns <= value.apply_ns <= value.control_ns + 30_000_000
+    or not 0 < value.control_ns <= value.apply_ns <= value.control_ns + 50_000_000
     or any(type(text) is not str or len(text) != 64 or any(c not in '0123456789abcdef' for c in text) for text in (value.profile_sha256, value.model_revision))
     or value.model_revision != value.binding.physical_model_revision
   ):
@@ -349,7 +349,7 @@ def _control_key(control, binding):
       )
     )
     or any(type(flag) is not bool for flag in (control.native_required, control.native_allowed))
-    or not 0 < control.state_ns <= control.control_ns <= control.state_ns + 30_000_000
+    or not 0 < control.state_ns <= control.control_ns <= control.state_ns + 50_000_000
     or not 0 < control.source_receipt_ns <= control.control_ns <= control.source_receipt_ns + 500_000_000
     or (control.identity, control.source_epoch, control.baseline_revision, control.controller_revision, control.native_identity, control.native_required)
     != (binding.identity, binding.source_epoch, binding.baseline_revision, binding.controller_revision, binding.native_identity, binding.native_required)

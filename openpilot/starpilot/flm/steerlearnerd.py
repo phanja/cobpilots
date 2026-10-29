@@ -175,13 +175,13 @@ def _source_config_known(source, now_ns):
     type(source.observed_ns) is int and type(source.expires_ns) is int and
     0 < source.observed_ns <= now_ns <= source.expires_ns <= source.observed_ns + SOURCE_LEASE_NS and
     type(source.cp_sha256) is str and len(source.cp_sha256) == 64 and
-    not source.cp_sha256.strip('0123456789abcdef') and
+    all(char in '0123456789abcdef' for char in source.cp_sha256) and
     type(source.reset) is str and 1 <= len(source.reset) <= 64 and
-    not source.reset.strip('0123456789abcdef') and
+    all(char in '0123456789abcdef' for char in source.reset) and
     type(source.calibration_generation) is str and (not source.calibration_generation or
-      len(source.calibration_generation) == 32 and not source.calibration_generation.strip('0123456789abcdef')) and
+      len(source.calibration_generation) == 32 and all(char in '0123456789abcdef' for char in source.calibration_generation)) and
     type(source.persistent_source_epoch) is str and (not source.persistent_source_epoch or
-      len(source.persistent_source_epoch) == 64 and not source.persistent_source_epoch.strip('0123456789abcdef')) and
+      len(source.persistent_source_epoch) == 64 and all(char in '0123456789abcdef' for char in source.persistent_source_epoch)) and
     type(source.manual_baseline) is tuple and len(source.manual_baseline) in (0, 3) and
     all(type(value) in (int, float) and math.isfinite(value) for value in source.manual_baseline))
 
@@ -480,9 +480,10 @@ def run(
   def source_current(*, read=False, publication=False):
     nonlocal source, source_rejected, source_cp_sha256, last_accepted_source
     now = clock()
-    if source_rejected and not read:
+    expired = source is None or not source.observed_ns <= now <= source.expires_ns
+    if source_rejected and not (read or expired):
       return False, now
-    if read or source is None or not source.observed_ns <= now <= source.expires_ns:
+    if read or expired:
       if not read:
         source_delivery.refresh(sm)
         now = clock()
@@ -500,7 +501,7 @@ def run(
       return False, now
     valid = bool(known and source.enabled and not source.manual and
       type(source.source_epoch) is str and len(source.source_epoch) == 64 and
-      not source.source_epoch.strip('0123456789abcdef') and
+      all(char in '0123456789abcdef' for char in source.source_epoch) and
       (source_cp_sha256 is None or source.cp_sha256 == source_cp_sha256))
     if not valid:
       source_rejected = True
@@ -1009,7 +1010,7 @@ def run(
           value.observedMonoTime, value.validUntilMonoTime = now, now + 500_000_000
           message.valid = True
         if publication_source_reader is not None:
-          valid_publication_source, publication_now = source_current()
+          valid_publication_source, publication_now = source_current(read=True, publication=True)
           if not valid_publication_source:
             # A reset/manual/vehicle/calibration transition must discard the
             # already prepared admission, never attach it to a new receipt.

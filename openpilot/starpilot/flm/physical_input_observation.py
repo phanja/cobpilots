@@ -262,10 +262,10 @@ def validate_input(row, binding, binding_digest):
   integer_fields = (row.control_ns, row.state_ns, row.output_state_ns, row.apply_ns,
                     row.source_receipt_ns, row.carrier_frame, row.carrier_observed_ns)
   if (any(type(value) is not int or value <= 0 for value in integer_fields) or
-      not row.state_ns <= row.control_ns <= row.state_ns + 30_000_000 or
+      not row.state_ns <= row.control_ns <= row.state_ns + 50_000_000 or
       not row.state_ns <= row.output_state_ns <= row.apply_ns or
-      not row.control_ns <= row.apply_ns <= row.control_ns + 30_000_000 or
-      row.apply_ns - row.output_state_ns > 30_000_000 or
+      not row.control_ns <= row.apply_ns <= row.control_ns + 50_000_000 or
+      row.apply_ns - row.output_state_ns > 50_000_000 or
       not row.source_receipt_ns <= row.control_ns <= row.source_receipt_ns + 500_000_000 or
       not row.apply_ns <= row.carrier_observed_ns <= row.apply_ns + 100_000_000 or
       type(row.command) not in (int, float) or not math.isfinite(row.command) or abs(row.command) > 1 or

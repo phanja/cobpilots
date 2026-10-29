@@ -192,7 +192,7 @@ class TrackingEpisodeBuilder:
       or control.model_wobble
       or control.limited
       and not asynchronous_hint(control)
-      or not 0 < control.state_ns <= control.control_ns <= control.state_ns + 30_000_000
+      or not 0 < control.state_ns <= control.control_ns <= control.state_ns + 50_000_000
       or not 0 < control.source_receipt_ns <= control.control_ns <= control.source_receipt_ns + 500_000_000
       or b.native_required
       and (

@@ -17,7 +17,7 @@ import math
 PROTOCOL = 'source-pose-plant-lag-v4-private'
 PHYSICAL_PROTOCOL = 'source-pose-physical-observation-lag-v1-private'
 LAGS_NS = tuple(range(0, 500_000_001, 10_000_000))
-JOIN_NS = 30_000_000
+JOIN_NS = 50_000_000
 MIN_EXCITATION = .05
 MAX_RMSE = .05
 MAX_COMMANDS = 12_000
@@ -211,7 +211,7 @@ def _validate(binding, tape, poses, windows):
     integers = (c.control_ns, c.state_ns, c.apply_ns, c.source_receipt_ns,
       c.carrier_frame, c.carrier_observed_ns)
     if (not all(_integer(v) for v in integers) or c.apply_ns <= previous or
-        not 0 < c.state_ns <= c.control_ns <= c.state_ns + 30_000_000 or
+        not 0 < c.state_ns <= c.control_ns <= c.state_ns + 50_000_000 or
         not c.control_ns <= c.apply_ns <= c.control_ns + 100_000_000 or
         not 0 < c.source_receipt_ns <= c.control_ns <= c.source_receipt_ns + 500_000_000 or
         c.native_required is not binding.native_required or
