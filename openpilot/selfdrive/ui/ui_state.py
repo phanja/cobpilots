@@ -532,6 +532,7 @@ class Device:
     self._screen_off = False
     self._screen_off_started = False
     self._wake_touch_active = False
+    self._last_lane_offset: float | None = None
 
   def invalidate_display_preferences(self) -> None:
     self._display_refresh_time = None
@@ -655,15 +656,28 @@ class Device:
     if not self._awake and touched:
       self._wake_touch_active = True
 
+    offset_changed = False
+    if ui_state.started:
+      try:
+        raw_offset = ui_state.params.get("LaneCenterOffset")
+        current_offset = float(raw_offset) if raw_offset is not None else None
+      except (TypeError, ValueError):
+        current_offset = None
+      if self._last_lane_offset is not None and current_offset is not None and abs(current_offset - self._last_lane_offset) > 0.005:
+        offset_changed = True
+      self._last_lane_offset = current_offset
+    else:
+      self._last_lane_offset = None
+
     if (ignition_just_turned_off or (self._display_preferences.enabled and ignition_changed) or
-        touched):
+        touched or offset_changed):
       self._reset_interactive_timeout()
 
     road_changed = ui_state.started != self._screen_off_started
     self._screen_off_started = ui_state.started
     critical = (ui_state.sm.valid.get('selfdriveState', False) and ui_state.sm.alive.get('selfdriveState', False) and
                 ui_state.sm['selfdriveState'].alertStatus == log.SelfdriveState.AlertStatus.critical)
-    if not ui_state.started or road_changed or touched or critical:
+    if not ui_state.started or road_changed or touched or critical or offset_changed:
       self._screen_off = False
     if critical:
       self._reset_interactive_timeout()

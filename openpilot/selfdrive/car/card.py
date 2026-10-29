@@ -332,6 +332,17 @@ class Car:
     self.gm_distance = GMDistanceButtons() if self.conditional_replay and gm_profiles_supported(self.CP) else None
     self.gm_distance_map = WheelMapCache(include_ioniq_media=False, cp=self.CP) if self.gm_distance is not None else None
     self.gm_distance_claim_tracker = ButtonTracker() if self.gm_distance is not None else None
+    self._last_pcm_dist = None
+    self._lane_offset_far = False
+    self._target_lane_offset = None
+    self._written_lane_offset = None
+    if self.CP.brand == "toyota":
+      try:
+        raw_val = self.params.get("LaneCenterOffset")
+        if raw_val is None:
+          self.params.put("LaneCenterOffset", 0.02)
+      except Exception:
+        pass
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly
     self.CP.passive = not controller_available or self.CP.dashcamOnly
     if self.CP.passive:
@@ -526,6 +537,35 @@ class Car:
     media_observation = media_owner.update(can_list) if media_owner is not None else None
     distance_owner = getattr(self, 'gm_distance', None)
     distance_observation = distance_owner.update(can_list) if distance_owner is not None else None
+
+    if self.CP.brand == "toyota":
+      pcm_dist = getattr(self.CI.CS, "pcm_follow_distance", 0)
+      lkas_pressed = any(
+        e.type == structs.CarState.ButtonEvent.Type.lkas and e.pressed
+        for e in CS.buttonEvents
+      )
+      if lkas_pressed:
+        self._lane_offset_far = not getattr(self, '_lane_offset_far', False)
+
+      dist_changed = pcm_dist in (1, 2, 3) and pcm_dist != self._last_pcm_dist
+      if (dist_changed or lkas_pressed) and pcm_dist in (1, 2, 3):
+        self._last_pcm_dist = pcm_dist
+        # Static lane center offsets:
+        # Toyota pcm_follow_distance: 3 = 1 Bar (Close/Left), 2 = 2 Bars (Med/Center), 1 = 3 Bars (Far/Right)
+        # Center is static 0.02m; Far Left is -0.28m, Far Right is +0.30m; Slight Left/Right are -0.13m / +0.15m
+        if getattr(self, '_lane_offset_far', False):
+          offset_map = {
+            3: -0.28,  # 1 Bar: Far Left
+            2: 0.02,   # 2 Bars: Center
+            1: 0.30,   # 3 Bars: Far Right
+          }
+        else:
+          offset_map = {
+            3: -0.13,  # 1 Bar: Slight Left
+            2: 0.02,   # 2 Bars: Center
+            1: 0.15,   # 3 Bars: Slight Right
+          }
+        self._target_lane_offset = offset_map[int(pcm_dist)]
 
     # Direct state_update callers retain eager radar behavior. The production
     # loop consumes this exact CAN batch after carState and control publication.
@@ -1844,6 +1884,13 @@ class Car:
       self.initial_cruise_speed = self.params.get("InitialCruiseSpeedKph", return_default=True)
       if self.aol_card_intent is not None:
         self.aol_card_intent.settings = read_settings(self.params)
+      target_offset = getattr(self, '_target_lane_offset', None)
+      if target_offset is not None and target_offset != getattr(self, '_written_lane_offset', None):
+        try:
+          self.params.put("LaneCenterOffset", float(target_offset))
+          self._written_lane_offset = target_offset
+        except Exception:
+          pass
       now = time.monotonic()
       if now >= next_cruise_read:
         self.slc_requested_configuration = self.read_slc_configuration()

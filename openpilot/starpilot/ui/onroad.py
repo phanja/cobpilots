@@ -15,9 +15,10 @@ import json
 
 import pyray as rl
 
+from openpilot.common.params import Params
 from openpilot.starpilot.ui import clip
 from openpilot.system.ui.lib.application import gui_app
-from openpilot.starpilot.ui.onroad_customization import (CLOCK_WIDGET, MODE_WIDGET, RAIL_WIDGETS, STOPPED_TIMER_WIDGET, placement, rgba,
+from openpilot.starpilot.ui.onroad_customization import (CLOCK_WIDGET, LANE_OFFSET_SIZE, LANE_OFFSET_WIDGET, MODE_WIDGET, RAIL_WIDGETS, STOPPED_TIMER_WIDGET, offset, placement, rgba,
                                                          widget_order, widget_size)
 from openpilot.starpilot.ui.appearance_preferences import CameraViewChoice
 
@@ -41,6 +42,7 @@ from openpilot.starpilot.ui.presentation import BitmapFonts, FontRole, Profile
 from openpilot.starpilot.ui.large_speed_geometry import ACTION_TEXT_SIZE
 from openpilot.starpilot.ui.speed_limit_widget import INK, MUTED, draw_ink
 from openpilot.starpilot.conditional_mode.policy import ModeChoice
+from openpilot.starpilot.ui.wheel_feedback import WheelFeedbackFade
 
 
 CameraLayer = Callable[[rl.Rectangle, OnroadState], None]
@@ -123,6 +125,8 @@ class OnroadView:
                background_layer: OverlayLayer | None = None, projection_viewport: tuple[float, float] | None = None,
                wall_clock: Callable[[], datetime | None] | None = None):
     self.projection_viewport = projection_viewport
+    self.params = Params()
+    self._lane_car_feedback = WheelFeedbackFade(brake_rgb=(255, 60, 60), accel_rgb=(50, 220, 80))
     self.wall_clock = wall_clock or (lambda: datetime.now().astimezone())
     self._corner_cache = CornerHintCache()
     self.quick_select_layer = None
@@ -332,6 +336,8 @@ class OnroadView:
           submit("torque_bar", lambda: self.torque_bar.render(content, state, width if self.projection_viewport else 2160))
         if state.stopped_duration_s is not None:
           submit(STOPPED_TIMER_WIDGET, lambda: self._stopped_timer(state, state.stopped_duration_s))
+        if placement(state.customization, profile, LANE_OFFSET_WIDGET)["enabled"]:
+          submit(LANE_OFFSET_WIDGET, lambda: self._lane_offset(content, state))
     else:
       if state.alert.size == AlertSize.NONE and not driver_camera:
         submit("speed_limit", lambda: self.compact_hud._speed_limit_sign(state))
@@ -410,6 +416,8 @@ class OnroadView:
             self.torque_bar.render(content, state, width if self.projection_viewport else 2160)
           if state.stopped_duration_s is not None:
             self._stopped_timer(state, state.stopped_duration_s)
+        if placement(state.customization, "large", LANE_OFFSET_WIDGET)["enabled"] and state.alert.size != AlertSize.FULL:
+          self._lane_offset(content, state)
         if self.extra_overlays is not None:
           self.extra_overlays(content, state)
         self.personality.render(state)
@@ -573,6 +581,87 @@ class OnroadView:
       y = position["y"] + center_y * scale - measured.height / 2
       self.fonts.draw(text, role, size, x + 2, y + 2, rl.Color(0, 0, 0, 170))
       self.fonts.draw(text, role, size, x, y, tint)
+
+  def _lane_offset(self, content: rl.Rectangle, state: OnroadState) -> None:
+    position = placement(state.customization, "large", LANE_OFFSET_WIDGET)
+    if not position["enabled"] or state.alert.size == AlertSize.FULL:
+      return
+
+    try:
+      raw = self.params.get("LaneCenterOffset")
+      offset_val = float(raw) if raw is not None else 0.02
+    except (TypeError, ValueError):
+      offset_val = 0.02
+
+    if offset_val <= -0.20:
+      active_idx = 0
+    elif offset_val <= -0.06:
+      active_idx = 1
+    elif offset_val < 0.08:
+      active_idx = 2
+    elif offset_val < 0.22:
+      active_idx = 3
+    else:
+      active_idx = 4
+
+    right_shift = (self.projection_viewport[0] if self.projection_viewport else state.viewport_width) - 1860
+    box_w, box_h = LANE_OFFSET_SIZE
+    box_x = position["x"] + right_shift
+    box_y = position["y"]
+
+    card_rect = rl.Rectangle(box_x, box_y, box_w, box_h)
+    fill = rl.Color(*rgba(state.customization, "cardFill", "large", LANE_OFFSET_WIDGET))
+    border = rl.Color(*rgba(state.customization, "cardBorder", "large", LANE_OFFSET_WIDGET))
+    if fill.a:
+      rl.draw_rectangle_rounded(card_rect, 0.35, 12, fill)
+    if border.a:
+      rl.draw_rectangle_rounded_lines_ex(card_rect, 0.35, 12, 2.0, border)
+
+    cx = box_x + box_w / 2
+    cy = box_y + box_h / 2
+
+    car_rgb = self._lane_car_feedback.update(state.wheel_acceleration, True, state.observed_ns, state.drive_frame)
+    car_color = rl.Color(car_rgb[0], car_rgb[1], car_rgb[2], 255)
+    tail_light = rl.Color(255, 220, 220, 255) if self._lane_car_feedback._amount < -0.2 else rl.Color(210, 32, 48, 255)
+
+    # White lane boundary lines |
+    rl.draw_line_ex(rl.Vector2(cx - 118, cy - 22), rl.Vector2(cx - 118, cy + 22), 2.5, rl.WHITE)
+    rl.draw_line_ex(rl.Vector2(cx + 118, cy - 22), rl.Vector2(cx + 118, cy + 22), 2.5, rl.WHITE)
+
+    # Blue bars on the outside when AOL or OP is engaged (tight twin-stripe ||)
+    if state.lateral_active or state.longitudinal_active:
+      blue_bar = rl.Color(0, 160, 255, 255)
+      rl.draw_line_ex(rl.Vector2(cx - 123, cy - 22), rl.Vector2(cx - 123, cy + 22), 3.0, blue_bar)
+      rl.draw_line_ex(rl.Vector2(cx + 123, cy - 22), rl.Vector2(cx + 123, cy + 22), 3.0, blue_bar)
+
+    spacing = 43
+    start_x = cx - (4 * spacing) / 2
+    dim_dot = rl.Color(255, 255, 255, 80)
+
+    for i in range(5):
+      slot_x = start_x + (i * spacing)
+      if i == active_idx:
+        # The active position IS the car!
+        car_x = slot_x
+        car_y = cy
+
+        roof = (
+          (car_x - 14, car_y - 2),
+          (car_x - 8, car_y - 15),
+          (car_x + 8, car_y - 15),
+          (car_x + 14, car_y - 2)
+        )
+        for s, e in zip(roof, roof[1:], strict=False):
+          rl.draw_line_ex(rl.Vector2(*s), rl.Vector2(*e), 2.5, car_color)
+
+        rl.draw_rectangle_rounded(rl.Rectangle(car_x - 17, car_y - 2, 34, 16), 0.4, 6, car_color)
+        rl.draw_rectangle(int(car_x - 15), int(car_y + 1), 6, 4, tail_light)
+        rl.draw_rectangle(int(car_x + 9), int(car_y + 1), 6, 4, tail_light)
+        rl.draw_rectangle(int(car_x - 14), int(car_y + 14), 5, 3, rl.Color(20, 24, 27, 255))
+        rl.draw_rectangle(int(car_x + 9), int(car_y + 14), 5, 3, rl.Color(20, 24, 27, 255))
+      else:
+        # Inactive positions are clean reference dots
+        rl.draw_circle(int(slot_x), int(cy), 4.0, dim_dot)
 
   def close(self) -> None:
     self.quick_select_layer = None
