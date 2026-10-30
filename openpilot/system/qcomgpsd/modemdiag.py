@@ -1,7 +1,9 @@
 import select
+import time
 from struct import pack, unpack_from, calcsize
 
 from openpilot.common.serial import Serial
+from openpilot.common.swaglog import cloudlog
 
 
 def _gen_crc16_reflected_table(poly: int) -> list[int]:
@@ -32,11 +34,19 @@ class ModemDiag:
     self.pend = b''
 
   def open_serial(self):
-    serial = Serial("/dev/ttyUSB0", baudrate=115200, rtscts=True, dsrdtr=True, timeout=0, exclusive=True)
-    serial.flush()
-    serial.reset_input_buffer()
-    serial.reset_output_buffer()
-    return serial
+    for i in range(30):
+      try:
+        serial = Serial("/dev/ttyUSB0", baudrate=115200, rtscts=True, dsrdtr=True, timeout=0, exclusive=True)
+        serial.flush()
+        serial.reset_input_buffer()
+        serial.reset_output_buffer()
+        return serial
+      except Exception as e:
+        if i == 0:
+          cloudlog.warning(f"qcomgpsd waiting for /dev/ttyUSB0: {e}")
+        if i == 29:
+          raise
+        time.sleep(0.5)
 
   ESCAPE_CHAR = b'\x7d'
   TRAILER_CHAR = b'\x7e'
