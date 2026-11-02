@@ -1013,8 +1013,10 @@ class LaneRuntimeTests(unittest.TestCase):
   def test_saved_settings_bounds_and_corruption(self):
     with OpenpilotPrefix():
       params = Params()
-      self.assertFalse(read_settings(params).enabled)
+      self.assertTrue(read_settings(params).enabled)
       self.assertTrue(read_settings(params).pause_on_signal)
+      params.put_bool('LaneCentering', False, block=True)
+      self.assertFalse(read_settings(params).enabled)
       params.put_bool('LaneCentering', True, block=True)
       params.put('LaneCenterOffset', -0.2, block=True)
       params.put('LaneCenteringE2EAuthority', 0.5, block=True)

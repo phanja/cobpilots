@@ -89,6 +89,7 @@ BOOL_DEFAULTS = {
   "SLCConfirmation": False,
   "PauseLateralOnSignal": False,
   "LaneCentering": True, "LaneCenteringPauseOnSignal": True,
+  "BlendfulUI": True, "BlendfulReadout": True,
   "CustomPersonalities": False, PLANNER_SELECTION_KEY: True,
   LEAD_APPROACH_KEY: False,
   LEAD_TAKEOFF_KEY: False,
@@ -125,7 +126,7 @@ AOL_THRESHOLD = "AolBrakePauseSpeedMps"
 AOL_LEGACY_THRESHOLD = "PauseAOLOnBrake"
 TORQUE_NUMBERS = LEGACY_KEYS
 LANE_LIVE_KEYS = frozenset(("LaneCentering", "LaneCenteringPauseOnSignal", "LaneCenterOffset",
-                            "LaneCenteringE2EAuthority", "LaneCenteringStrength"))
+                            "LaneCenteringE2EAuthority", "LaneCenteringStrength", "BlendfulUI", "BlendfulReadout"))
 CURVE_KEYS = frozenset((CURVE_MASTER_KEY, CURVE_NO_LEAD_KEY))
 CURVE_PAGE_KEYS = CURVE_KEYS | {"ShowCSCStatus"}
 CRUISE_KEYS = frozenset(("CustomCruise", "CustomCruiseLong"))
@@ -1164,6 +1165,8 @@ class FeatureSettingsOwner:
                           minimum=33, maximum=round(STRENGTH_MAX / STRENGTH_BASELINE * 100), step=1 if strength_row.step > 0 else 0,
                           reason="100% is normal; lower values reduce centering and higher values strengthen it" if strength_supported else
                           "Not available with this vehicle configuration"))
+      rows.extend((self._bool_row("BlendfulUI", "Blendful visualization", allowed and lane_enabled == "1"),
+                   self._bool_row("BlendfulReadout", "Blendful cm readout", allowed and lane_enabled == "1")))
     elif page == FeaturePage.LANE_CHANGE:
       title = "Lane Changes"
       rows.extend(self.lane_changes.rows(parked))
@@ -1486,7 +1489,7 @@ class FeatureSettingsOwner:
       elif key in LANE_LIVE_KEYS and not self.authority("lane"):
         group = "lane_live"
       else:
-        group = "lane" if key.startswith("LaneCenter") else "long" if long_key else "slc"
+        group = "lane" if (key in LANE_LIVE_KEYS or key.startswith("LaneCenter")) else "long" if long_key else "slc"
     else:
       return False
     try:
@@ -1523,7 +1526,7 @@ class FeatureSettingsOwner:
         from openpilot.starpilot.lateral.lane_runtime import runtime_supported
         if not runtime_supported(self.vehicle_params()):
           return False
-      if (key == "LaneCenteringPauseOnSignal" and self._value("LaneCentering")[0] != "1" and
+      if (key in ("LaneCenteringPauseOnSignal", "BlendfulUI", "BlendfulReadout") and self._value("LaneCentering")[0] != "1" and
           not (reset_default and request.value == ("On" if self._default(key) == "1" else "Off"))):
         return False
       if key == "ForceStopDistanceOffset" and self._value("ForceStops")[0] != "1" and not (reset_default and float(request.value) == float(self._default(key))):
@@ -1758,7 +1761,7 @@ class FeatureSettingsOwner:
         if source_key in AOL_BUTTONS:
           return written == str(encoded).encode("utf-8")
       return True
-    except (OSError, ValueError, TypeError, OverflowError):
+    except (OSError, ValueError, TypeError, OverflowError, UnknownKeyName):
       return False
 
   def _save_profile_document(self, request: FeatureSettingsRequest, raw: bytes, expected: bytes | None,

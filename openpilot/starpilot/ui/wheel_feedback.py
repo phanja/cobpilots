@@ -20,7 +20,9 @@ def observe_wheel_acceleration(car_state: Any) -> float | None:
 class WheelFeedbackFade:
   """Measured acceleration tint: full color at ±2 m/s², with hysteresis and fading."""
 
-  def __init__(self) -> None:
+  def __init__(self, brake_rgb: tuple[int, int, int] = BRAKE_RGB, accel_rgb: tuple[int, int, int] = ACCEL_RGB) -> None:
+    self._brake_rgb = brake_rgb
+    self._accel_rgb = accel_rgb
     self._target = 0.0
     self._amount = 0.0
     self._last_ns = 0
@@ -45,6 +47,6 @@ class WheelFeedbackFade:
       self._target = target
       self._amount += (target - self._amount) * (1 - math.exp(-dt / 0.08))
       amount = self._amount
-    endpoint = BRAKE_RGB if amount < 0 else ACCEL_RGB
+    endpoint = self._brake_rgb if amount < 0 else self._accel_rgb
     red, green, blue = [round(255 + (channel - 255) * abs(amount)) for channel in endpoint]
     return red, green, blue

@@ -113,6 +113,36 @@ class UnknownKeyName(Exception):
   pass
 
 
+def _load_keys_header():
+  keys = {}
+  defaults = {}
+  try:
+    header = Path(__file__).parent / "params_keys.h"
+    with open(header, "r") as f:
+      for line in f:
+        line = line.strip()
+        if line.startswith('{"') and '",' in line:
+          name = line.split('{"', 1)[1].split('",', 1)[0]
+          type_str = "STRING"
+          for t in ("BOOL", "INT", "FLOAT", "TIME", "JSON", "BYTES", "STRING"):
+            if f", {t}" in line or f" {t}," in line or f" {t}}}" in line:
+              type_str = t
+              break
+          k_bytes = name.encode()
+          keys[k_bytes] = getattr(ParamKeyType, type_str, ParamKeyType.STRING)
+          parts = [p.strip() for p in line.split(",")]
+          for p in parts[2:]:
+            p_clean = p.rstrip("}").rstrip(";").strip()
+            if p_clean.startswith('"') and p_clean.endswith('"'):
+              defaults[k_bytes] = p_clean.strip('"').encode()
+  except Exception:
+    pass
+  return keys, defaults
+
+
+HEADER_KEYS, HEADER_DEFAULTS = _load_keys_header()
+
+
 class Params:
   def __init__(self, d=""):
     path = ensure_bytes(params_path(d))
@@ -129,9 +159,11 @@ class Params:
 
   def check_key(self, key):
     key = ensure_bytes(key)
-    if b"\0" in key or not params_check_key(self.p, key):
+    if b"\0" in key:
       raise UnknownKeyName(key)
-    return key
+    if params_check_key(self.p, key) or key in HEADER_KEYS:
+      return key
+    raise UnknownKeyName(key)
 
   def python2cpp(self, proposed_type, expected_type, value, key):
     cast = PYTHON_2_CPP.get((proposed_type, expected_type))
@@ -149,7 +181,10 @@ class Params:
       return self._cpp2python(t, default, None, key)
 
   def _default(self, key):
-    return _copy_string(params_get_default(self.p, key))
+    k = self.check_key(key)
+    if k in HEADER_KEYS and not params_check_key(self.p, k):
+      return HEADER_DEFAULTS.get(k)
+    return _copy_string(params_get_default(self.p, k))
 
   def get(self, key, block=False, return_default=False):
     k = self.check_key(key)
@@ -162,8 +197,16 @@ class Params:
       return self._cpp2python(t, default, None, key)
     return self._cpp2python(t, value, default, key)
 
-  def get_bool(self, key, block=False):
-    return bool(params_get_bool(self.p, self.check_key(key), block))
+  def get_bool(self, key, block=False, return_default=False):
+    k = self.check_key(key)
+    raw = _copy_string(params_get(self.p, k, block))
+    if raw == b"":
+      if return_default:
+        default = self._default(k)
+        if default is not None:
+          return default in (b"1", "1", 1, True, b"true", b"True")
+      return False
+    return raw in (b"1", "1", 1, True, b"true", b"True")
 
   def _put_cast(self, key, dat):
     return ensure_bytes(self.python2cpp(type(dat), self.get_type(key), dat, key))
@@ -185,12 +228,18 @@ class Params:
     return _copy_string(params_get_path(self.p, key, len(key))).decode()
 
   def get_type(self, key):
-    return ParamKeyType(params_get_key_type(self.p, self.check_key(key)))
+    k = self.check_key(key)
+    if k in HEADER_KEYS and not params_check_key(self.p, k):
+      return HEADER_KEYS[k]
+    return ParamKeyType(params_get_key_type(self.p, k))
 
   def all_keys(self):
     keys = []
     for i in range(params_keys_size(self.p)):
       keys.append(_copy_string(params_key_at(self.p, i)))
+    for k in HEADER_KEYS:
+      if k not in keys:
+        keys.append(k)
     return keys
 
   def get_default_value(self, key):

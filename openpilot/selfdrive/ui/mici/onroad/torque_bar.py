@@ -9,6 +9,7 @@ from opendbc.car import ACCELERATION_DUE_TO_GRAVITY
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app
+from openpilot.common.params import Params
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import FirstOrderFilter
@@ -147,12 +148,31 @@ def arc_bar_pts(r_mid: float, thickness: float,
 DEFAULT_MAX_LAT_ACCEL = 3.0  # m/s^2
 
 
+def get_param_bool(params, key: str, default: bool = False) -> bool:
+  try:
+    val = params.get(key)
+    if val is None:
+      return default
+    if isinstance(val, (bytes, bytearray)):
+      return val in (b"1", b"true", b"True")
+    return str(val).lower() in ("1", "true")
+  except Exception:
+    return default
+
+
 class TorqueBar(Widget):
   def __init__(self, demo: bool = False):
     super().__init__()
     self._demo = demo
     self._torque_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
     self._torque_line_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
+    self._pull = FirstOrderFilter(0.0, 0.5, 1 / gui_app.target_fps)
+    self._trust_filter = FirstOrderFilter(0.0, 0.5, 1 / gui_app.target_fps)
+    self._blendful_active = False
+    self._blendful_extent = 0.0
+    self._params = Params()
+    self._blendful_enabled = get_param_bool(self._params, "BlendfulUI", default=True) and get_param_bool(self._params, "LaneCentering", default=True)
+    self._last_param_check = 0.0
 
   def update_filter(self, value: float):
     """Update the torque filter value (for demo mode)."""
@@ -186,6 +206,36 @@ class TorqueBar(Widget):
         self._torque_filter.update(np.clip((lateral_acceleration + accel_diff) / max_lateral_acceleration, -1, 1))
     else:
       self._torque_filter.update(-ui_state.sm['carOutput'].actuatorsOutput.torque)
+
+    now = time.monotonic()
+    if now - self._last_param_check > 1.0:
+      self._last_param_check = now
+      self._blendful_enabled = get_param_bool(self._params, "BlendfulUI", default=True) and get_param_bool(self._params, "LaneCentering", default=True)
+
+    lat_active = bool(ui_state.sm['carControl'].latActive) if ui_state.sm.seen['carControl'] else False
+    if self._blendful_enabled and lat_active:
+      self._blendful_active = True
+      if 'starpilotLateralState' in ui_state.sm.seen and ui_state.sm.alive['starpilotLateralState']:
+        lc = ui_state.sm['starpilotLateralState'].laneCentering
+        if abs(lc.appliedCorrection) > 1e-7:
+          v_ego = float(ui_state.sm['carState'].vEgo) if ui_state.sm.seen['carState'] else 0.0
+          lookahead = max(v_ego * 1.5, 10.0)
+          pull = -float(lc.appliedCorrection) * (lookahead ** 2) / 2.0
+          self._pull.update(pull)
+          self._trust_filter.update(1.0)
+        else:
+          self._pull.update(0.0)
+          self._trust_filter.update(0.5)
+      else:
+        self._pull.update(0.0)
+        self._trust_filter.update(0.0)
+    else:
+      self._pull.update(0.0)
+      self._trust_filter.update(0.0)
+      self._blendful_active = False
+
+    nudge = math.sqrt(min(abs(self._pull.x) / 0.2, 1.0)) if abs(self._pull.x) > 0 else 0.0
+    self._blendful_extent = math.copysign(nudge, self._pull.x)
 
   def _render(self, rect: rl.Rectangle) -> None:
     # adjust y pos with torque
@@ -264,3 +314,19 @@ class TorqueBar(Widget):
       dot_y = self._rect.y + self._rect.height - torque_line_offset - torque_line_height / 2
       rl.draw_circle(int(cx), int(dot_y), 10 // 2,
                      rl.Color(182, 182, 182, int(255 * 0.9 * self._torque_line_alpha_filter.x)))
+
+    # draw blendful lane center gauge under torque bar
+    if self._blendful_enabled and (self._blendful_active or abs(self._blendful_extent) > 0.01):
+      fade = self._torque_line_alpha_filter.x
+      half_span = fade * torque_bg_angle_span / 2.0
+      gauge_gap = 4
+      gauge_thickness = 6
+      gauge_dot = 4
+      r_mid = torque_line_radius - (gauge_gap + gauge_thickness / 2.0)
+      track = arc_bar_pts(r_mid, gauge_thickness, top_angle - half_span, top_angle + half_span, cap_radius=gauge_thickness / 2.0) + offset
+      draw_polygon(rect, track, rl.Color(255, 255, 255, int(255 * 0.15 * fade)))
+      if abs(half_span * self._blendful_extent) * np.pi / 180.0 * torque_line_radius >= 1.0:
+        fill = arc_bar_pts(r_mid, gauge_thickness, top_angle, top_angle + half_span * self._blendful_extent, cap_radius=gauge_thickness / 2.0) + offset
+        blue_alpha = np.clip(0.3 + 0.7 * self._trust_filter.x, 0.0, 1.0) * fade
+        draw_polygon(rect, fill, rl.color_alpha(rl.Color(0, 200, 255, 255), blue_alpha))
+      rl.draw_circle(int(cx), int(cy - r_mid), gauge_dot, rl.Color(182, 182, 182, int(255 * 0.9 * fade)))

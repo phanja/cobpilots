@@ -213,10 +213,19 @@ CEM_GAUGE_INSET = (44, 24)
 CEM_GAUGE_SIZE = (256, 276)
 PROFILES['large']['widgets'][CEM_GAUGE_WIDGET] = _widget('CEM road gauge', CEM_GAUGE_WIDGET, *CEM_GAUGE_SIZE,
                                                          56, 536)
+
+LANE_OFFSET_WIDGET = "lane_offset"
+LANE_OFFSET_SIZE = (284, 76)
+_lane_offset = _widget("Lane offset", LANE_OFFSET_WIDGET, *LANE_OFFSET_SIZE, 1520, 75)
+_lane_offset["default"]["enabled"] = True
+_lane_offset["note"] = "Lane centering offset indicator with active car slot and engagement bars"
+PROFILES["large"]["widgets"][LANE_OFFSET_WIDGET] = _lane_offset
+
 ROAD_BASE_WIDTH = 1860
 SIDEBAR_EXTRA = 300
 ANCHOR_SHIFT = {"steering_wheel": 1.0, NAV_CARD_WIDGET: 1.0, NAV_MAP_WIDGET: 1.0,
-                "current_speed": .5, "torque_bar": .5, MODE_WIDGET: .5, CLOCK_WIDGET: .5}
+                "current_speed": .5, "torque_bar": .5, MODE_WIDGET: .5, CLOCK_WIDGET: .5,
+                LANE_OFFSET_WIDGET: 1.0}
 for _key, _widget_data in PROFILES["large"]["widgets"].items():
   if _key in ANCHOR_SHIFT:
     _widget_data["anchorShift"] = ANCHOR_SHIFT[_key]
@@ -224,7 +233,7 @@ for _key, _widget_data in PROFILES["large"]["widgets"].items():
   _widget_data["bounds"] = {**_base, "x": _base["x"] - ANCHOR_SHIFT.get(_key, 0) * SIDEBAR_EXTRA, "width": _base["width"] + SIDEBAR_EXTRA}
   _widget_data["expandable"] = True
 # Older documents retain every saved placement and gain this independent widget.
-OPTIONAL_WIDGETS = frozenset({MODE_WIDGET, CLOCK_WIDGET, STOPPED_TIMER_WIDGET, CEM_GAUGE_WIDGET, NAV_CARD_WIDGET, NAV_MAP_WIDGET, JETLINK_WIDGET})
+OPTIONAL_WIDGETS = frozenset({MODE_WIDGET, CLOCK_WIDGET, STOPPED_TIMER_WIDGET, CEM_GAUGE_WIDGET, NAV_CARD_WIDGET, NAV_MAP_WIDGET, JETLINK_WIDGET, LANE_OFFSET_WIDGET})
 
 # The torque arc grows when the developer sidebar closes; protect both road widths.
 _torque = PROFILES['large']['widgets']['torque_bar']
@@ -256,6 +265,7 @@ WIDGET_COLORS = {
     "steering_wheel": {"cardFill": None, "cardBorder": "#00000000"},
     "driver_monitor": _FRAME_COLORS,
     "following_distance": _FRAME_COLORS,
+    LANE_OFFSET_WIDGET: _FRAME_COLORS,
   },
   "compact": {
     MODE_WIDGET: {"text": "#FFFFFFFF"},
@@ -274,7 +284,7 @@ WIDGET_COLORS = {
 DEFAULT_WIDGET_ORDER = {
   "large": (NAV_MAP_WIDGET, "pip_left", "pip_right", "cruise_limits", "speed_limit_actions", CEM_GAUGE_WIDGET, "current_speed",
             "steering_wheel", "torque_bar", "following_distance", "driver_monitor", MODE_WIDGET, CLOCK_WIDGET,
-            STOPPED_TIMER_WIDGET, NAV_CARD_WIDGET, JETLINK_WIDGET),
+            STOPPED_TIMER_WIDGET, NAV_CARD_WIDGET, JETLINK_WIDGET, LANE_OFFSET_WIDGET),
   "compact": ("pip_left", "pip_right", "speed_limit", "max_speed", "steering_wheel", "torque_bar",
               "speed_limit_actions", "driver_monitor", *RAIL_WIDGETS, MODE_WIDGET, CLOCK_WIDGET, STOPPED_TIMER_WIDGET),
 }
@@ -571,6 +581,10 @@ def validate_document(value):
       if missing and missing <= OPTIONAL_WIDGETS:
         for optional in missing:
           layouts[profile][optional] = dict(data["widgets"][optional]["default"])
+      if profile == 'large' and LANE_OFFSET_WIDGET in layouts[profile]:
+        lo = layouts[profile][LANE_OFFSET_WIDGET]
+        if type(lo) is dict and type(lo.get('x')) in (int, float) and lo['x'] > 1546:
+          lo['x'] = max(-270, min(1546, lo['x'] - 300 if lo['x'] > 1800 else 1520))
   if value['version'] < 11:
     old_defaults = {'large': {'speed_limit_actions': (100, 296), CEM_GAUGE_WIDGET: (56, 452)},
                     'compact': {'speed_limit_actions': (128, 186), 'clock': (168, 92), MODE_WIDGET: (162, 22)}}

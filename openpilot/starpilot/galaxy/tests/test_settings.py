@@ -1141,12 +1141,16 @@ class SettingsGatewayTest(unittest.TestCase):
       ("LaneCenteringPauseOnSignal", "Off", b"0"),
       ("LaneCenterOffset", 0.15, b"0.15"),
       ("LaneCenteringE2EAuthority", 75, b"0.75"),
-      ("LaneCenteringStrength", 105, b"1.575")):
+      ("LaneCenteringStrength", 105, b"1.575"),
+      ("BlendfulUI", "Off", b"0"),
+      ("BlendfulReadout", "On", b"1")):
       with self.subTest(key=key):
         page = self.page("lane")
         labels = {"LaneCentering": "Enable Lane Centering", "LaneCenteringPauseOnSignal": "Pause on signal",
                   "LaneCenterOffset": "Lane offset", "LaneCenteringE2EAuthority": "Model path preference",
-                  "LaneCenteringStrength": "Lane Centering Strength"}
+                  "LaneCenteringStrength": "Lane Centering Strength",
+                  "BlendfulUI": "Blendful visualization",
+                  "BlendfulReadout": "Blendful cm readout"}
         index = next(i for i, row in enumerate(page["rows"]) if row["label"] == labels[key])
         self.assertTrue(page["rows"][index]["available"])
         intent = self.gateway.preview(page["view"], index, 0, self.session, self.generation, value=value)

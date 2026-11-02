@@ -1,4 +1,5 @@
 import math
+import time
 import numpy as np
 from openpilot.starpilot.ui.raylib import rl
 from openpilot.cereal import log, messaging
@@ -6,6 +7,7 @@ from opendbc.car.structs import car
 from types import SimpleNamespace
 from openpilot.common.params import Params
 from openpilot.starpilot.ui.appearance_preferences import format_lead_info
+from openpilot.starpilot.ui.blendful_renderer import BlendfulUI
 from openpilot.starpilot.ui.rainbow_path import RainbowPath
 from openpilot.starpilot.ui.road_colors import lane_color, path_mode, solid_gradient
 from openpilot.starpilot.ui.onroad_customization import ROAD_COLORS
@@ -105,6 +107,9 @@ class ModelRenderer(ModelGeometry, Widget):
       stops=[],
     )
     self._rainbow_path = RainbowPath()
+    self._blendful_ui = BlendfulUI()
+    self._blendful_center = ModelPoints()
+    self._params = Params()
     self.road_style = {}
 
     # Get longitudinal control setting from car parameters
@@ -192,6 +197,8 @@ class ModelRenderer(ModelGeometry, Widget):
     if self._visual_status() != UIStatus.DISENGAGED:
       self._draw_lane_lines()
       self._draw_path(sm)
+      if getattr(self, '_blendful_ui', None) is not None:
+        self._blendful_ui.draw_readout_box(rect)
 
     if lead_ready and getattr(self, '_paint', True):
       self._draw_lead_indicator()
@@ -301,6 +308,33 @@ class ModelRenderer(ModelGeometry, Widget):
         line.projected_points = polygon
       self._lane_projection_clip = clip_key
 
+      # Update Blendful road center line
+      sm = ui_state.sm
+      applied = 0.0
+      lateral_active = bool(sm['carControl'].latActive) if sm.seen['carControl'] else False
+      if 'starpilotLateralState' in sm.seen and sm.alive['starpilotLateralState']:
+        lc = sm['starpilotLateralState'].laneCentering
+        applied = float(lc.appliedCorrection)
+      v_ego = float(sm['carState'].vEgo) if sm.seen['carState'] else 0.0
+      self._blendful_ui.update(v_ego, applied, lateral_active, time.monotonic())
+
+      offset_m = 0.0
+      if getattr(self, '_params', None) is not None:
+        try:
+          offset_m = float(self._params.get("LaneCenterOffset") or 0.0)
+        except (ValueError, TypeError):
+          pass
+
+      center_raw = self._blendful_ui.compute_center_line_3d(
+        self._lane_lines, self._lane_line_probs, sm['modelV2'].laneLineStds, offset_m=offset_m
+      )
+      if center_raw.shape[0] > 0:
+        self._blendful_center.projected_points = self._map_line_to_polygon(
+          center_raw, 0.12, self._path_offset_z, max_idx
+        )
+      else:
+        self._blendful_center.projected_points = np.empty((0, 2), dtype=np.float32)
+
     # Update path using raw points
     if lead and lead.present:
       lead_d = lead.dRel * 2.0
@@ -401,6 +435,10 @@ class ModelRenderer(ModelGeometry, Widget):
     self._lane_centering_direction = lane_centering_direction(ui_state.sm, ui_state.display_time_ns(), ui_state.started_frame)
     if not getattr(self, '_paint', True):
       return
+
+    # Draw Blendful center line (muted grey idle, bright cyan/blue on nudge)
+    if getattr(self, '_blendful_center', None) is not None and self._blendful_center.projected_points.size:
+      self._blendful_ui.draw_road_center(self._rect, self._blendful_center.projected_points + offset)
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:

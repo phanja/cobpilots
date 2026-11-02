@@ -210,8 +210,13 @@ def raw_correction(model: Any, speed_mps: float, offset_m: float, e2e_authority:
       width = right - left
       if not MIN_LANE_WIDTH <= width <= MAX_LANE_WIDTH:
         return None
+      l_std, r_std = float(stds[1]), float(stds[2])
+      l_prob, r_prob = float(probs[1]), float(probs[2])
+      l_var = (l_std ** 2) / max(l_prob, 1e-4)
+      r_var = (r_std ** 2) / max(r_prob, 1e-4)
       safe_offset = min(MAX_OFFSET, max(0.0, width * 0.5 - MIN_CENTER_TO_LINE))
-      target_y = (left + right) * 0.5 + clip_scalar(offset, -safe_offset, safe_offset)
+      center_y = (r_var * (left + width * 0.5) + l_var * (right - width * 0.5)) / (l_var + r_var)
+      target_y = center_y + clip_scalar(offset, -safe_offset, safe_offset)
     else:
       std_path = _path_xy(model.position.x, model.position.yStd) if _paths is None else _paths[3]
       if _single_target is not None:
